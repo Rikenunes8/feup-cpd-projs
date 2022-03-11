@@ -71,6 +71,6 @@ def OnMultLine(nlines, ncols):
 
 
 
-OnMult(500, 500)
-OnMultLine(500, 500)
+OnMult(512, 512)
+OnMultLine(512, 512)
 

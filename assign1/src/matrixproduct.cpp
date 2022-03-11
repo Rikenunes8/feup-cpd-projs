@@ -199,7 +199,8 @@ int main (int argc, char *argv[])
 
 	op=1;
 	do {
-		cout << endl << "1. Multiplication" << endl;
+    cout << endl << "0. Exit" << endl;
+		cout << "1. Multiplication" << endl;
 		cout << "2. Line Multiplication" << endl;
 		cout << "3. Block Multiplication" << endl;
 		cout << "Selection?: ";
