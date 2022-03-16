@@ -38,6 +38,26 @@ def OnMult(nlines, ncols):
 
     for l in range(0, nlines):
         for c in range(0, ncols):
+            for k in range(0, nlines):
+                matrixC[l][c] += matrixA[l][k] * matrixB[k][c]
+
+    end = time.time()
+
+    print("time taken: ", end - start)
+    print("Sample of result matrix:\n", matrixC[0][:10])
+
+
+def OnMultFaster(nlines, ncols):
+    print("\nOnMult Starting...")
+
+    (matrixA, matrixB, matrixC) = createMatrixes(nlines, ncols)
+
+    print("Starting calculations ({}x{})".format(nlines, ncols))  
+    start = time.time()
+  
+
+    for l in range(0, nlines):
+        for c in range(0, ncols):
             temp = 0
             for k in range(0, nlines):
                 temp += matrixA[l][k] * matrixB[k][c]
@@ -67,10 +87,41 @@ def OnMultLine(nlines, ncols):
     print("time taken: ", end - start)
     print("Sample of result matrix:\n", matrixC[0][:10])
 
-    return
+
+def OnMultBlock(nlines, ncols):
+
+    print("\OnMultBlock Starting...")
+
+    (matrixA, matrixB, matrixC) = createMatrixes(nlines, ncols)
+
+    print("Starting calculations ({}x{})".format(nlines, ncols))  
+    start = time.time()
+
+
+
+    
+
+
+
+    for l in range(0, nlines):
+        for c in range(0, ncols):
+            for k in range(0, nlines):
+                matrixC[l][c] += matrixA[l][k] * matrixB[k][c]
+
+
+
+
+
+
+
+    end = time.time()
+
+    print("time taken: ", end - start)
+    print("Sample of result matrix:\n", matrixC[0][:10])
+
 
 
 
 OnMult(500, 500)
-OnMultLine(500, 500)
+#OnMultLine(500, 500)
 
