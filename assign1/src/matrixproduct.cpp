@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <time.h>
 #include <cstdlib>
 #include <papi.h>
@@ -10,7 +11,7 @@ using namespace std;
 #define SYSTEMTIME clock_t
 
  
-void OnMult(int m_ar, int m_br) {
+double OnMult(int m_ar, int m_br) {
 	
 	SYSTEMTIME Time1, Time2;
 	
@@ -21,26 +22,26 @@ void OnMult(int m_ar, int m_br) {
 	double *pha, *phb, *phc;
 	
 
-  pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
+  	pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
 	phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
 	phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
 
 	for(i=0; i<m_ar; i++) {
 		for(j=0; j<m_ar; j++) {
 			pha[i*m_ar + j] = (double)1.0;
-    }
-  }
+    	}
+  	}
 
 
 	for(i=0; i<m_br; i++) {
 		for(j=0; j<m_br; j++) {
 			phb[i*m_br + j] = (double)(i+1);
-    }
-  }
+    	}
+  	}
 
 
 
-  Time1 = clock();
+  	Time1 = clock();
 
 	for(i=0; i<m_ar; i++) {	
     for( j=0; j<m_br; j++) {	
@@ -53,8 +54,9 @@ void OnMult(int m_ar, int m_br) {
 	}
 
 
-  Time2 = clock();
-	sprintf(st, "Time: %3.3f seconds\n", (double)(Time2 - Time1) / CLOCKS_PER_SEC);
+  	Time2 = clock();
+	double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
 
 	// display 10 elements of the result matrix tto verify correctness
@@ -70,11 +72,11 @@ void OnMult(int m_ar, int m_br) {
   free(phb);
   free(phc);
 	
-	
+	return time;
 }
 
 // add code here for line x line matriz multiplication
-void OnMultLine(int m_ar, int m_br) {
+double OnMultLine(int m_ar, int m_br) {
   
   SYSTEMTIME Time1, Time2;
 	
@@ -110,7 +112,7 @@ void OnMultLine(int m_ar, int m_br) {
 
 
 
-  Time1 = clock();
+  	Time1 = clock();
 
 	for(i=0; i<m_ar; i++) {	
     for( k=0; k<m_ar; k++) {	
@@ -121,9 +123,12 @@ void OnMultLine(int m_ar, int m_br) {
 	}
 
 
-  Time2 = clock();
-	sprintf(st, "Time: %3.3f seconds\n", (double)(Time2 - Time1) / CLOCKS_PER_SEC);
+  	Time2 = clock();
+	double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
+
+
 
 	// display 10 elements of the result matrix tto verify correctness
 	cout << "Result matrix: " << endl;
@@ -134,17 +139,16 @@ void OnMultLine(int m_ar, int m_br) {
 	}
 	cout << endl;
 
-  free(pha);
-  free(phb);
-  free(phc);
-    
+	free(pha);
+	free(phb);
+	free(phc);
+	return time;
 }
 
 // add code here for block x block matriz multiplication
-void OnMultBlock(int m_ar, int m_br, int bkSize) {
+double OnMultBlock(int m_ar, int m_br, int bkSize) {
     
-    
-	SYSTEMTIME Time1, Time2;
+    SYSTEMTIME Time1, Time2;
 	
 	char st[100];
 	double temp;
@@ -169,9 +173,7 @@ void OnMultBlock(int m_ar, int m_br, int bkSize) {
 			phb[i*m_br + j] = (double)(i+1);
     }
   }
-
 	int nb = m_ar/bkSize;
-
 
   Time1 = clock();
 
@@ -202,7 +204,8 @@ void OnMultBlock(int m_ar, int m_br, int bkSize) {
 
 
   Time2 = clock();
-	sprintf(st, "Time: %3.3f seconds\n", (double)(Time2 - Time1) / CLOCKS_PER_SEC);
+  double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
 
 	// display 10 elements of the result matrix tto verify correctness
@@ -217,7 +220,8 @@ void OnMultBlock(int m_ar, int m_br, int bkSize) {
   free(pha);
   free(phb);
   free(phc);
-	
+
+  return time;
 }
 
 
@@ -250,9 +254,14 @@ int main (int argc, char *argv[])
 	int op;
 	
 	int EventSet = PAPI_NULL;
-  	long long values[2];
+  	long long values[4];
   	int ret;
-	
+	double time;
+
+	std::ofstream outfile;
+
+  	outfile.open("times.txt", std::ios_base::app); // append instead of overwrite 
+	outfile << "Method,MatrixSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,CPI" << endl;
 
 	ret = PAPI_library_init( PAPI_VER_CURRENT );
 	if ( ret != PAPI_VER_CURRENT )
@@ -270,10 +279,16 @@ int main (int argc, char *argv[])
 	ret = PAPI_add_event(EventSet,PAPI_L2_DCM);
 	if (ret != PAPI_OK) cout << "ERROR: PAPI_L2_DCM" << endl;
 
+	ret = PAPI_add_event(EventSet,PAPI_TOT_CYC);
+	if (ret != PAPI_OK) cout << "ERROR: PAPI_TOT_CYC" << endl;
+
+	ret = PAPI_add_event(EventSet,PAPI_TOT_INS );
+	if (ret != PAPI_OK) cout << "ERROR: PAPI_TOT_INS" << endl;
+
 
 	op=1;
 	do {
-    cout << endl << "0. Exit" << endl;
+		cout << endl << "0. Exit" << endl;
 		cout << "1. Multiplication" << endl;
 		cout << "2. Line Multiplication" << endl;
 		cout << "3. Block Multiplication" << endl;
@@ -292,15 +307,15 @@ int main (int argc, char *argv[])
 
 		switch (op){
 			case 1: 
-				OnMult(lin, col);
+				time = OnMult(lin, col);
 				break;
 			case 2:
-				OnMultLine(lin, col);  
+				time = OnMultLine(lin, col);  
 				break;
 			case 3:
 				cout << "Block Size? ";
 				cin >> blockSize;
-				OnMultBlock(lin, col, blockSize);  
+				time = OnMultBlock(lin, col, blockSize);  
 				break;
 
 		}
@@ -309,6 +324,8 @@ int main (int argc, char *argv[])
   		if (ret != PAPI_OK) cout << "ERROR: Stop PAPI" << endl;
   		printf("L1 DCM: %lld \n",values[0]);
   		printf("L2 DCM: %lld \n",values[1]);
+		double CPI = values[2] / values[3];
+		outfile << op << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << "," << CPI << endl;
 
 		ret = PAPI_reset( EventSet );
 		if ( ret != PAPI_OK )
@@ -323,6 +340,14 @@ int main (int argc, char *argv[])
 		std::cout << "FAIL remove event" << endl; 
 
 	ret = PAPI_remove_event( EventSet, PAPI_L2_DCM );
+	if ( ret != PAPI_OK )
+		std::cout << "FAIL remove event" << endl;
+	
+	ret = PAPI_remove_event( EventSet, PAPI_TOT_CYC );
+	if ( ret != PAPI_OK )
+		std::cout << "FAIL remove event" << endl; 
+	
+	ret = PAPI_remove_event( EventSet, PAPI_TOT_INS );
 	if ( ret != PAPI_OK )
 		std::cout << "FAIL remove event" << endl; 
 
