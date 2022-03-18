@@ -191,8 +191,8 @@ double OnMultBlock(int n, int bkSize) {
 			for(k = 0; k < nb; k++){
 
 				for(l = 0; l < bkSize; l++){
-					for(c = 0; c < bkSize; c++){
-						for(t = 0; t < bkSize; t++){
+					for(t = 0; t < bkSize; t++){
+					  for(c = 0; c < bkSize; c++){
 							phc[(i*bkSize + l) * n + (j*bkSize + c)] += pha[(i*bkSize + l) * n + (k*bkSize + t)] * phb[(k*bkSize + t) * n + (j*bkSize + c)];
 						}
 					}
@@ -260,7 +260,7 @@ int main (int argc, char *argv[])
 {
 
 	char c;
-	int n, blockSize;
+	int n, blockSize = 0;
 	int op;
 	
 	int EventSet = PAPI_NULL;
@@ -271,7 +271,7 @@ int main (int argc, char *argv[])
 	std::ofstream outfile;
 
   outfile.open("times.csv", std::ios_base::app); // append instead of overwrite 
-	outfile << "Method,MatrixSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_FP_INS,CPI,Gflops,L1&L2_TOT_MISS" << endl;
+	outfile << "Method,MatrixSize,BlockSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_FP_INS,CPI,Gflops,L1&L2_TOT_MISS" << endl;
 
 	ret = PAPI_library_init( PAPI_VER_CURRENT );
 	if ( ret != PAPI_VER_CURRENT )
@@ -282,11 +282,11 @@ int main (int argc, char *argv[])
   if (ret != PAPI_OK) cout << "ERROR: create eventset" << endl;
 
 
-	// add_event(EventSet, PAPI_L1_DCM , "PAPI_L1_DCM" );
-  // add_event(EventSet, PAPI_L2_DCM , "PAPI_L2_DCM" );
-  // add_event(EventSet, PAPI_TOT_CYC, "PAPI_TOT_CYC");
-  // add_event(EventSet, PAPI_TOT_INS, "PAPI_TOT_INS");
-  // add_event(EventSet, PAPI_FP_INS , "PAPI_FP_INS" );
+	add_event(EventSet, PAPI_L1_DCM , "PAPI_L1_DCM" );
+  add_event(EventSet, PAPI_L2_DCM , "PAPI_L2_DCM" );
+  add_event(EventSet, PAPI_TOT_CYC, "PAPI_TOT_CYC");
+  add_event(EventSet, PAPI_TOT_INS, "PAPI_TOT_INS");
+  add_event(EventSet, PAPI_FP_INS , "PAPI_FP_OPS" );
 
 	op=1;
 	do {
@@ -327,14 +327,12 @@ int main (int argc, char *argv[])
     // printf("L2 DCM: %lld \n",values[1]);
     // printf("TOT_CYC: %lld \n",values[2]);
     // printf("TOT_INS: %lld \n",values[3]);
-    // printf("FP_INS: %lld \n",values[4]);
+    // printf("FP_OPS: %lld \n",values[4]);
 
 		double CPI = values[2] / values[3];
-    unsigned int complexity;
-
-    double Gflops = complexity / time * 10e9;
+    double Gflops = values[4] / time * 10e9;
     unsigned int l1l2_tot_miss = values[0] + values[1];
-		// outfile << op << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << "," << CPI << "," << Gflops << "," << l1l2_tot_miss<< endl;
+		outfile << op << "," << n << "," << blockSize << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << "," << CPI << "," << Gflops << "," << l1l2_tot_miss<< endl;
 
 		ret = PAPI_reset( EventSet );
 		if ( ret != PAPI_OK )
@@ -342,14 +340,15 @@ int main (int argc, char *argv[])
 
 	}while (op != 0);
 
-	// remove_event( EventSet, PAPI_L1_DCM );
-  // remove_event( EventSet, PAPI_L2_DCM );
-	// remove_event( EventSet, PAPI_TOT_CYC);
-	// remove_event( EventSet, PAPI_TOT_INS);
-	// remove_event( EventSet, PAPI_FP_INS );
+	remove_event( EventSet, PAPI_L1_DCM );
+  remove_event( EventSet, PAPI_L2_DCM );
+	remove_event( EventSet, PAPI_TOT_CYC);
+	remove_event( EventSet, PAPI_TOT_INS);
+	remove_event( EventSet, PAPI_FP_OPS );
 
 	ret = PAPI_destroy_eventset( &EventSet );
 	if ( ret != PAPI_OK )
 		std::cout << "FAIL destroy" << endl;
 
+  outfile.close();
 }
