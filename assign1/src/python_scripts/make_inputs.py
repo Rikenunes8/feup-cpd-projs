@@ -8,7 +8,7 @@ since2 = 4096
 to2 = 10240
 step2 = 2048
 
-blocks = [128, 256, 512]
+blocks = [128, 256, 512, 1024]
 
 
 f = open("inputs.txt", "w")
