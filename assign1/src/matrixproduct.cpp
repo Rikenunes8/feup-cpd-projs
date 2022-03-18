@@ -11,7 +11,7 @@ using namespace std;
 #define SYSTEMTIME clock_t
 
  
-double OnMult(int m_ar, int m_br) {
+double OnMult(int n) {
 	
 	SYSTEMTIME Time1, Time2;
 	
@@ -22,39 +22,39 @@ double OnMult(int m_ar, int m_br) {
 	double *pha, *phb, *phc;
 	
 
-  	pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
-	phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
-	phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
+  pha = (double *)malloc((n * n) * sizeof(double));
+	phb = (double *)malloc((n * n) * sizeof(double));
+	phc = (double *)malloc((n * n) * sizeof(double));
 
-	for(i=0; i<m_ar; i++) {
-		for(j=0; j<m_ar; j++) {
-			pha[i*m_ar + j] = (double)1.0;
-    	}
-  	}
-
-
-	for(i=0; i<m_br; i++) {
-		for(j=0; j<m_br; j++) {
-			phb[i*m_br + j] = (double)(i+1);
-    	}
-  	}
+	for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			pha[i*n + j] = (double)1.0;
+    }
+  }
 
 
+	for(i=0; i<n; i++) {
+    for(j=0; j<n; j++) {
+			phb[i*n + j] = (double)(i+1);
+    }
+  }
 
-  	Time1 = clock();
 
-	for(i=0; i<m_ar; i++) {	
-    for( j=0; j<m_br; j++) {	
+
+  Time1 = clock();
+
+	for(i=0; i<n; i++) {	
+    for( j=0; j<n; j++) {	
       temp = 0;
-			for( k=0; k<m_ar; k++) {	
-				temp += pha[i*m_ar+k] * phb[k*m_br+j];
+			for( k=0; k<n; k++) {	
+				temp += pha[i*n+k] * phb[k*n+j];
 			}
-			phc[i*m_ar+j]=temp;
+			phc[i*n+j]=temp;
 		}
 	}
 
 
-  	Time2 = clock();
+  Time2 = clock();
 	double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
 	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
@@ -62,7 +62,7 @@ double OnMult(int m_ar, int m_br) {
 	// display 10 elements of the result matrix tto verify correctness
 	cout << "Result matrix: " << endl;
 	for(i=0; i<1; i++) {	
-    for(j=0; j<min(10,m_br); j++) {
+    for(j=0; j<min(10,n); j++) {
       cout << phc[j] << " ";
     }
 	}
@@ -76,7 +76,7 @@ double OnMult(int m_ar, int m_br) {
 }
 
 // add code here for line x line matriz multiplication
-double OnMultLine(int m_ar, int m_br) {
+double OnMultLine(int n) {
   
   SYSTEMTIME Time1, Time2;
 	
@@ -87,43 +87,43 @@ double OnMultLine(int m_ar, int m_br) {
 	double *pha, *phb, *phc;
 	
 
-  pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
-	phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
-	phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
+  pha = (double *)malloc((n * n) * sizeof(double));
+	phb = (double *)malloc((n * n) * sizeof(double));
+	phc = (double *)malloc((n * n) * sizeof(double));
 
-	for(i=0; i<m_ar; i++) {
-		for(j=0; j<m_ar; j++) {
-			pha[i*m_ar + j] = (double)1.0;
+	for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			pha[i*n + j] = (double)1.0;
     }
   }
 
 
-	for(i=0; i<m_br; i++) {
-		for(j=0; j<m_br; j++) {
-			phb[i*m_br + j] = (double)(i+1);
+	for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			phb[i*n + j] = (double)(i+1);
     }
   }
 
-  for(i=0; i<m_ar; i++) {
-		for(j=0; j<m_ar; j++) {
-			phc[i*m_br + j] = (double)0;
+  for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			phc[i*n + j] = (double)0;
     }
   }
 
 
 
-  	Time1 = clock();
+  Time1 = clock();
 
-	for(i=0; i<m_ar; i++) {	
-    for( k=0; k<m_ar; k++) {	
-      for( j=0; j<m_br; j++) {	
-				phc[i*m_ar+j] += pha[i*m_ar+k] * phb[k*m_br+j];
+	for(i=0; i<n; i++) {	
+    for( k=0; k<n; k++) {	
+      for( j=0; j<n; j++) {	
+				phc[i*n+j] += pha[i*n+k] * phb[k*n+j];
 			}
 		}
 	}
 
 
-  	Time2 = clock();
+  Time2 = clock();
 	double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
 	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
@@ -133,7 +133,7 @@ double OnMultLine(int m_ar, int m_br) {
 	// display 10 elements of the result matrix tto verify correctness
 	cout << "Result matrix: " << endl;
 	for(i=0; i<1; i++) {	
-    for(j=0; j<min(10,m_br); j++) {
+    for(j=0; j<min(10,n); j++) {
       cout << phc[j] << " ";
     }
 	}
@@ -146,9 +146,9 @@ double OnMultLine(int m_ar, int m_br) {
 }
 
 // add code here for block x block matriz multiplication
-double OnMultBlock(int m_ar, int m_br, int bkSize) {
+double OnMultBlock(int n, int bkSize) {
     
-    SYSTEMTIME Time1, Time2;
+  SYSTEMTIME Time1, Time2;
 	
 	char st[100];
 	double temp;
@@ -157,23 +157,32 @@ double OnMultBlock(int m_ar, int m_br, int bkSize) {
 	double *pha, *phb, *phc;
 	
 
-  pha = (double *)malloc((m_ar * m_ar) * sizeof(double));
-	phb = (double *)malloc((m_ar * m_ar) * sizeof(double));
-	phc = (double *)malloc((m_ar * m_ar) * sizeof(double));
+  pha = (double *)malloc((n * n) * sizeof(double));
+	phb = (double *)malloc((n * n) * sizeof(double));
+	phc = (double *)malloc((n * n) * sizeof(double));
 
-	for(i=0; i<m_ar; i++) {
-		for(j=0; j<m_ar; j++) {
-			pha[i*m_ar + j] = (double)1.0;
+	for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			pha[i*n + j] = (double)1.0;
     }
   }
 
 
-	for(i=0; i<m_br; i++) {
-		for(j=0; j<m_br; j++) {
-			phb[i*m_br + j] = (double)(i+1);
+	for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			phb[i*n + j] = (double)(i+1);
     }
   }
-	int nb = m_ar/bkSize;
+
+  for(i=0; i<n; i++) {
+		for(j=0; j<n; j++) {
+			phc[i*n + j] = 0.0;
+    }
+  }
+	int nb = n/bkSize;
+  cout << "nb: " << nb << endl;
+  cout << "bkSize: " << bkSize << endl;
+  cout << "n: " << n << endl;
 
   Time1 = clock();
 
@@ -181,10 +190,10 @@ double OnMultBlock(int m_ar, int m_br, int bkSize) {
 		for(j = 0; j < nb; j++){
 			for(k = 0; k < nb; k++){
 
-				for(l = 0; l < i; l++){
-					for(c = 0; c < j; c++){
-						for(t = 0; t < k; t++){
-							phc[(i * nb + l) * m_ar + (j * nb) + c] += pha[(i * nb + l) * m_ar + (k * nb) + t] * phb[(k * nb + t) * m_ar + (j * nb) + c];
+				for(l = 0; l < bkSize; l++){
+					for(c = 0; c < bkSize; c++){
+						for(t = 0; t < bkSize; t++){
+							phc[(i*bkSize + l) * n + (j*bkSize + c)] += pha[(i*bkSize + l) * n + (k*bkSize + t)] * phb[(k*bkSize + t) * n + (j*bkSize + c)];
 						}
 					}
 				}
@@ -192,18 +201,8 @@ double OnMultBlock(int m_ar, int m_br, int bkSize) {
 		}
 	}
 
-	for(i=0; i<m_ar; i++) {	
-    for( j=0; j<m_br; j++) {	
-      temp = 0;
-			for( k=0; k<m_ar; k++) {	
-				temp += pha[i*m_ar+k] * phb[k*m_br+j];
-			}
-			phc[i*m_ar+j]=temp;
-		}
-	}
-
-
   Time2 = clock();
+  
   double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
 	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
@@ -211,7 +210,7 @@ double OnMultBlock(int m_ar, int m_br, int bkSize) {
 	// display 10 elements of the result matrix tto verify correctness
 	cout << "Result matrix: " << endl;
 	for(i=0; i<1; i++) {	
-    for(j=0; j<min(10,m_br); j++) {
+    for(j=0; j<min(10,n); j++) {
       cout << phc[j] << " ";
     }
 	}
@@ -245,23 +244,34 @@ void init_papi() {
             << " REVISION: " << PAPI_VERSION_REVISION(retval) << "\n";
 }
 
+void add_event(int EventSet, int event, string error) {
+  int ret = PAPI_add_event(EventSet,event );
+	if (ret != PAPI_OK) cout << "ERROR: " << error << endl;
+}
+
+void remove_event(int EventSet, int event) {
+  int ret = PAPI_remove_event( EventSet, event);
+	if ( ret != PAPI_OK )
+		std::cout << "FAIL remove event" << endl; 
+}
+
 
 int main (int argc, char *argv[])
 {
 
 	char c;
-	int lin, col, blockSize;
+	int n, blockSize;
 	int op;
 	
 	int EventSet = PAPI_NULL;
-  	long long values[4];
-  	int ret;
+  long long values[5];
+  int ret;
 	double time;
 
 	std::ofstream outfile;
 
-  	outfile.open("times.txt", std::ios_base::app); // append instead of overwrite 
-	outfile << "Method,MatrixSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,CPI" << endl;
+  outfile.open("times.csv", std::ios_base::app); // append instead of overwrite 
+	outfile << "Method,MatrixSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_FP_INS,CPI,Gflops,L1&L2_TOT_MISS" << endl;
 
 	ret = PAPI_library_init( PAPI_VER_CURRENT );
 	if ( ret != PAPI_VER_CURRENT )
@@ -269,22 +279,14 @@ int main (int argc, char *argv[])
 
 
 	ret = PAPI_create_eventset(&EventSet);
-		if (ret != PAPI_OK) cout << "ERROR: create eventset" << endl;
+  if (ret != PAPI_OK) cout << "ERROR: create eventset" << endl;
 
 
-	ret = PAPI_add_event(EventSet,PAPI_L1_DCM );
-	if (ret != PAPI_OK) cout << "ERROR: PAPI_L1_DCM" << endl;
-
-
-	ret = PAPI_add_event(EventSet,PAPI_L2_DCM);
-	if (ret != PAPI_OK) cout << "ERROR: PAPI_L2_DCM" << endl;
-
-	ret = PAPI_add_event(EventSet,PAPI_TOT_CYC);
-	if (ret != PAPI_OK) cout << "ERROR: PAPI_TOT_CYC" << endl;
-
-	ret = PAPI_add_event(EventSet,PAPI_TOT_INS );
-	if (ret != PAPI_OK) cout << "ERROR: PAPI_TOT_INS" << endl;
-
+	// add_event(EventSet, PAPI_L1_DCM , "PAPI_L1_DCM" );
+  // add_event(EventSet, PAPI_L2_DCM , "PAPI_L2_DCM" );
+  // add_event(EventSet, PAPI_TOT_CYC, "PAPI_TOT_CYC");
+  // add_event(EventSet, PAPI_TOT_INS, "PAPI_TOT_INS");
+  // add_event(EventSet, PAPI_FP_INS , "PAPI_FP_INS" );
 
 	op=1;
 	do {
@@ -297,8 +299,7 @@ int main (int argc, char *argv[])
 		if (op == 0)
 			break;
 		printf("Dimensions: lins=cols ? ");
-   		cin >> lin;
-   		col = lin;
+    cin >> n;
 
 
 		// Start counting
@@ -307,49 +308,45 @@ int main (int argc, char *argv[])
 
 		switch (op){
 			case 1: 
-				time = OnMult(lin, col);
+				time = OnMult(n);
 				break;
 			case 2:
-				time = OnMultLine(lin, col);  
+				time = OnMultLine(n);  
 				break;
 			case 3:
 				cout << "Block Size? ";
 				cin >> blockSize;
-				time = OnMultBlock(lin, col, blockSize);  
+				time = OnMultBlock(n, blockSize);  
 				break;
-
 		}
 
-  		ret = PAPI_stop(EventSet, values);
-  		if (ret != PAPI_OK) cout << "ERROR: Stop PAPI" << endl;
-  		printf("L1 DCM: %lld \n",values[0]);
-  		printf("L2 DCM: %lld \n",values[1]);
+    ret = PAPI_stop(EventSet, values);
+    if (ret != PAPI_OK) cout << "ERROR: Stop PAPI" << endl;
+
+    // printf("L1 DCM: %lld \n",values[0]);
+    // printf("L2 DCM: %lld \n",values[1]);
+    // printf("TOT_CYC: %lld \n",values[2]);
+    // printf("TOT_INS: %lld \n",values[3]);
+    // printf("FP_INS: %lld \n",values[4]);
+
 		double CPI = values[2] / values[3];
-		outfile << op << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << "," << CPI << endl;
+    unsigned int complexity;
+
+    double Gflops = complexity / time * 10e9;
+    unsigned int l1l2_tot_miss = values[0] + values[1];
+		// outfile << op << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << "," << CPI << "," << Gflops << "," << l1l2_tot_miss<< endl;
 
 		ret = PAPI_reset( EventSet );
 		if ( ret != PAPI_OK )
 			std::cout << "FAIL reset" << endl; 
 
-
-
 	}while (op != 0);
 
-	ret = PAPI_remove_event( EventSet, PAPI_L1_DCM );
-	if ( ret != PAPI_OK )
-		std::cout << "FAIL remove event" << endl; 
-
-	ret = PAPI_remove_event( EventSet, PAPI_L2_DCM );
-	if ( ret != PAPI_OK )
-		std::cout << "FAIL remove event" << endl;
-	
-	ret = PAPI_remove_event( EventSet, PAPI_TOT_CYC );
-	if ( ret != PAPI_OK )
-		std::cout << "FAIL remove event" << endl; 
-	
-	ret = PAPI_remove_event( EventSet, PAPI_TOT_INS );
-	if ( ret != PAPI_OK )
-		std::cout << "FAIL remove event" << endl; 
+	// remove_event( EventSet, PAPI_L1_DCM );
+  // remove_event( EventSet, PAPI_L2_DCM );
+	// remove_event( EventSet, PAPI_TOT_CYC);
+	// remove_event( EventSet, PAPI_TOT_INS);
+	// remove_event( EventSet, PAPI_FP_INS );
 
 	ret = PAPI_destroy_eventset( &EventSet );
 	if ( ret != PAPI_OK )
