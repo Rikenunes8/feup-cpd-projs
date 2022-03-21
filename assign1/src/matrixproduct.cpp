@@ -29,33 +29,25 @@ double OnMult(int n) {
 	for(i=0; i<n; i++) {
 		for(j=0; j<n; j++) {
 			pha[i*n + j] = (double)1.0;
-    }
-  }
-
-
-	for(i=0; i<n; i++) {
-    for(j=0; j<n; j++) {
 			phb[i*n + j] = (double)(i+1);
+      phc[i*n + j] = (double)0;
     }
   }
-
 
 
   Time1 = clock();
 
 	for(i=0; i<n; i++) {	
     for( j=0; j<n; j++) {	
-      temp = 0;
 			for( k=0; k<n; k++) {	
-				temp += pha[i*n+k] * phb[k*n+j];
+				phc[i*n+j] += pha[i*n+k] * phb[k*n+j];
 			}
-			phc[i*n+j]=temp;
 		}
 	}
 
-
   Time2 = clock();
-	double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
+
+  double time = (double)(Time2 - Time1) / CLOCKS_PER_SEC;
 	sprintf(st, "Time: %3.3f seconds\n", time);
 	cout << st;
 
@@ -94,23 +86,10 @@ double OnMultLine(int n) {
 	for(i=0; i<n; i++) {
 		for(j=0; j<n; j++) {
 			pha[i*n + j] = (double)1.0;
-    }
-  }
-
-
-	for(i=0; i<n; i++) {
-		for(j=0; j<n; j++) {
 			phb[i*n + j] = (double)(i+1);
-    }
-  }
-
-  for(i=0; i<n; i++) {
-		for(j=0; j<n; j++) {
 			phc[i*n + j] = (double)0;
     }
   }
-
-
 
   Time1 = clock();
 
@@ -164,21 +143,11 @@ double OnMultBlock(int n, int bkSize) {
 	for(i=0; i<n; i++) {
 		for(j=0; j<n; j++) {
 			pha[i*n + j] = (double)1.0;
-    }
-  }
-
-
-	for(i=0; i<n; i++) {
-		for(j=0; j<n; j++) {
 			phb[i*n + j] = (double)(i+1);
-    }
-  }
-
-  for(i=0; i<n; i++) {
-		for(j=0; j<n; j++) {
 			phc[i*n + j] = 0.0;
     }
   }
+
 	int nb = n/bkSize;
   cout << "nb: " << nb << endl;
   cout << "bkSize: " << bkSize << endl;
@@ -271,7 +240,7 @@ int main (int argc, char *argv[])
 	std::ofstream outfile;
 
   outfile.open("times.csv", std::ios_base::app); // append instead of overwrite 
-	outfile << "Method,MatrixSize,BlockSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_FP_INS,CPI,Gflops,L1&L2_TOT_MISS" << endl;
+	outfile << "Method,MatrixSize,BlockSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_FP_OPS,CPI,Gflops,L1&L2_TOT_MISS" << endl;
 
 	ret = PAPI_library_init( PAPI_VER_CURRENT );
 	if ( ret != PAPI_VER_CURRENT )
@@ -298,9 +267,9 @@ int main (int argc, char *argv[])
 		cin >>op;
 		if (op == 0)
 			break;
-		printf("Dimensions: lins=cols ? ");
+		cout << "Dimensions: lins=cols ? ";
     cin >> n;
-
+    cout << "N = " << n << endl;
 
 		// Start counting
 		ret = PAPI_start(EventSet);
@@ -316,6 +285,7 @@ int main (int argc, char *argv[])
 			case 3:
 				cout << "Block Size? ";
 				cin >> blockSize;
+        cout << "Block Size = " << blockSize << endl;
 				time = OnMultBlock(n, blockSize);  
 				break;
 		}
