@@ -1,4 +1,4 @@
-reps = 3
+reps = 1
 
 since1 = 600
 to1 = 3000
@@ -13,22 +13,22 @@ blocks = [128, 256, 512, 1024]
 
 f = open("inputs.txt", "w")
 
-for i in range(since1, to1+1, step1):
-  for _ in range(reps):
-    f.write("1\n")
-    f.write(str(i)+"\n")
+# for i in range(since1, to1+1, step1):
+#   for _ in range(reps):
+#     f.write("1\n")
+#     f.write(str(i)+"\n")
 
-for i in range(since1, to1+1, step1):
-  for _ in range(reps):
-    f.write("2\n")
-    f.write(str(i)+"\n")
+# for i in range(since1, to1+1, step1):
+#   for _ in range(reps):
+#     f.write("2\n")
+#     f.write(str(i)+"\n")
 
 
 
-for i in range(since2, to2+1, step2):
-  for _ in range(reps):
-    f.write("2\n")
-    f.write(str(i)+"\n")
+# for i in range(since2, to2+1, step2):
+#   for _ in range(reps):
+#     f.write("2\n")
+#     f.write(str(i)+"\n")
 
 for b in blocks:
   for i in range(since2, to2+1, step2):
