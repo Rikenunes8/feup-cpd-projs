@@ -237,10 +237,10 @@ int main (int argc, char *argv[])
   int ret;
 	double time;
 
-	std::ofstream outfile;
+	ofstream outfile;
 
   outfile.open("times.csv", std::ios_base::app); // append instead of overwrite 
-	outfile << "Method,MatrixSize,BlockSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS,PAPI_FP_OPS,CPI,Gflops,L1&L2_TOT_MISS" << endl;
+	outfile << "Method,MatrixSize,BlockSize,Duration,PAPI_L1_DCM,PAPI_L2_DCM,PAPI_TOT_CYC,PAPI_TOT_INS" << endl;
 
 	ret = PAPI_library_init( PAPI_VER_CURRENT );
 	if ( ret != PAPI_VER_CURRENT )
@@ -255,7 +255,6 @@ int main (int argc, char *argv[])
   add_event(EventSet, PAPI_L2_DCM , "PAPI_L2_DCM" );
   add_event(EventSet, PAPI_TOT_CYC, "PAPI_TOT_CYC");
   add_event(EventSet, PAPI_TOT_INS, "PAPI_TOT_INS");
-  add_event(EventSet, PAPI_FP_INS , "PAPI_FP_OPS" );
 
 	op=1;
 	do {
@@ -293,16 +292,7 @@ int main (int argc, char *argv[])
     ret = PAPI_stop(EventSet, values);
     if (ret != PAPI_OK) cout << "ERROR: Stop PAPI" << endl;
 
-    // printf("L1 DCM: %lld \n",values[0]);
-    // printf("L2 DCM: %lld \n",values[1]);
-    // printf("TOT_CYC: %lld \n",values[2]);
-    // printf("TOT_INS: %lld \n",values[3]);
-    // printf("FP_OPS: %lld \n",values[4]);
-
-		double CPI = values[2] / values[3];
-    double Gflops = values[4] / time * 10e9;
-    unsigned int l1l2_tot_miss = values[0] + values[1];
-		outfile << op << "," << n << "," << blockSize << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << "," << CPI << "," << Gflops << "," << l1l2_tot_miss<< endl;
+		outfile << op << "," << n << "," << blockSize << "," << time << "," << values[0] << "," << values[1] << "," << values[2] << "," << values[3] << endl;
 
 		ret = PAPI_reset( EventSet );
 		if ( ret != PAPI_OK )
@@ -314,7 +304,6 @@ int main (int argc, char *argv[])
   remove_event( EventSet, PAPI_L2_DCM );
 	remove_event( EventSet, PAPI_TOT_CYC);
 	remove_event( EventSet, PAPI_TOT_INS);
-	remove_event( EventSet, PAPI_FP_OPS );
 
 	ret = PAPI_destroy_eventset( &EventSet );
 	if ( ret != PAPI_OK )
