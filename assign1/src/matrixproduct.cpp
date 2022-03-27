@@ -67,7 +67,6 @@ double OnMult(int n) {
   return time;
 }
 
-// add code here for line x line matriz multiplication
 double OnMultLine(int n) {
   
   SYSTEMTIME Time1, Time2;
@@ -125,7 +124,6 @@ double OnMultLine(int n) {
   return time;
 }
 
-// add code here for block x block matriz multiplication
 double OnMultBlock(int n, int bkSize) {
     
   SYSTEMTIME Time1, Time2;
@@ -277,8 +275,8 @@ int main (int argc, char *argv[]) {
     switch (op){
       case 1: 
         time = OnMult(n);
-      break;
-        case 2:
+        break;
+      case 2:
         time = OnMultLine(n);  
         break;
       case 3:
