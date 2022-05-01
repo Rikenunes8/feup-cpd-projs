@@ -13,22 +13,13 @@ public class Store implements IMembership{
     private DatagramSocket datagramSocket;
     private NetworkInterface networkInterface;
 
-    public DatagramSocket getDatagramSocket() {
-        return datagramSocket;
-    }
-
     public static void main(String[] args) throws IOException {
         Store store = parseArgs(args);
         store.join();
 
         for (int i = 0; i < 5; i++) { // TODO
-            byte[] recvBuffer = new byte[8092];
-            String date;
-            DatagramPacket recvPacket = new DatagramPacket(recvBuffer, recvBuffer.length);
-            System.out.println("\nWaiting for a new packet: ...");
-            store.getDatagramSocket().receive(recvPacket);
-            date = new String(recvPacket.getData(), 0, recvPacket.getLength());
-            System.out.println("Right now @ "+ recvPacket.getAddress() + " it is " + date);
+            String date = store.receiveMcastMessage();
+            System.out.println("Right now it is " + date);
         }
 
         store.leave();
@@ -47,6 +38,7 @@ public class Store implements IMembership{
             nodeIP    = args[2];
             storePort = Integer.parseInt(args[3]);
         } catch (UnknownHostException e) {
+            System.out.println(usage());
             throw new RuntimeException(e);
         }
         return new Store(mcastAddr, mcastPort, nodeIP, storePort);
@@ -68,12 +60,32 @@ public class Store implements IMembership{
         this.networkInterface = null;
     }
 
+    private String receiveMcastMessage() throws IOException {
+        byte[] recvBuffer = new byte[8092];
+        DatagramPacket recvPacket = new DatagramPacket(recvBuffer, recvBuffer.length);
+        System.out.println("\nWaiting for a new packet: ...");
+        this.datagramSocket.receive(recvPacket);
+        return new String(recvPacket.getData(), 0, recvPacket.getLength());
+    }
+    private void sendMcastMessage(String msg) throws IOException {
+        if (msg == null) return;
+        byte[] sndBuffer = msg.getBytes();
+        DatagramPacket sndPacket = new DatagramPacket(sndBuffer, sndBuffer.length, this.mcastAddr, this.mcastPort);
+        System.out.println("Sending message to " + this.mcastAddr + ":" + this.mcastPort);
+        this.datagramSocket.send(sndPacket);
+
+    }
+
     private void initializeMembership() {
         // TODO
     }
 
     @Override
     public boolean join() {
+        if (this.membershipCounter % 2 == 0) {
+            System.out.println("This node already belongs to a multicast group");
+            return false;
+        }
         try {
             this.membershipCounter++;
             this.datagramSocket = new DatagramSocket(null);
@@ -82,25 +94,40 @@ public class Store implements IMembership{
             String networkInterfaceStr = "loopback"; // TODO
             this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
             this.datagramSocket.joinGroup(new InetSocketAddress(this.mcastAddr, 0), networkInterface);
+
+            // Notice cluster members of my join
+            String msg = MessageBuilder.messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            sendMcastMessage(msg);
+
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
-            this.datagramSocket = null;
             throw new RuntimeException(e);
         }
-        return false;
+        return true;
     }
 
     @Override
     public boolean leave() {
+        if (this.membershipCounter % 2 == 1) {
+            System.out.println("This node does not belong to a multicast group");
+            return false;
+        }
         try {
             this.membershipCounter++;
             this.datagramSocket.leaveGroup(new InetSocketAddress(this.mcastAddr, 0), this.networkInterface);
+            this.datagramSocket = null;
+            this.networkInterface = null;
+
+            // Notice cluster members of my leave
+            String msg = MessageBuilder.messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            sendMcastMessage(msg);
+
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
             throw new RuntimeException(e);
         }
-        return false;
+        return true;
     }
 }

@@ -1,7 +1,10 @@
 import java.util.List;
 
 public class MessageBuilder {
-    public static String messageJoinLeave(int nodeIP, int port, int membershipCounter) {
+    static final char CR = 0xD;
+    static final char LF = 0xA;
+
+    public static String messageJoinLeave(String nodeIP, int port, int membershipCounter) {
         // TODO implement
         return null;
     }
@@ -16,11 +19,11 @@ public class MessageBuilder {
 
         for (String line : headerLines) {
             stringBuilder.append(line);
-            stringBuilder.append(0xD);
-            stringBuilder.append(0xA);
+            stringBuilder.append(CR);
+            stringBuilder.append(LF);
         }
-        stringBuilder.append(0xD);
-        stringBuilder.append(0xA);
+        stringBuilder.append(CR);
+        stringBuilder.append(LF);
         return stringBuilder.toString();
     }
 
