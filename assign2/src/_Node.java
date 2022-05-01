@@ -7,7 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Scanner;
 
-public class Node implements IStore {
+public class _Node implements IStore {
 
     private final String id;
     MessageDigest encoder;
@@ -24,7 +24,7 @@ public class Node implements IStore {
     }
 
     // Constructors
-    public Node(String id){
+    public _Node(String id){
         this.id = id;
         try {
             encoder = MessageDigest.getInstance("SHA-256");
