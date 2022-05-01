@@ -85,7 +85,7 @@ public class Store implements IMembership{
 
             // Notice cluster members of my join
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            sendMcastMessage(msg, this.datagramSocket, this.mcastAddr, this.mcastPort);
+            sendMcastMessage(msg, this.datagramSocket);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -106,7 +106,7 @@ public class Store implements IMembership{
 
             // Notice cluster members of my leave
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            sendMcastMessage(msg, this.datagramSocket, this.mcastAddr, this.mcastPort);
+            sendMcastMessage(msg, this.datagramSocket);
 
             this.datagramSocket.leaveGroup(new InetSocketAddress(this.mcastAddr, 0), this.networkInterface);
             this.datagramSocket = null;
