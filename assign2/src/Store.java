@@ -1,5 +1,9 @@
+import static messages.MessageBuilder.*;
+import static messages.MulticastMessager.*;
+
 import java.io.IOException;
 import java.net.*;
+
 
 public class Store implements IMembership{
     private final InetAddress mcastAddr;
@@ -18,7 +22,7 @@ public class Store implements IMembership{
         store.join();
 
         for (int i = 0; i < 5; i++) { // TODO
-            String date = store.receiveMcastMessage();
+            String date = receiveMcastMessage(store.datagramSocket);
             System.out.println("Right now it is " + date);
         }
 
@@ -60,22 +64,6 @@ public class Store implements IMembership{
         this.networkInterface = null;
     }
 
-    private String receiveMcastMessage() throws IOException {
-        byte[] recvBuffer = new byte[8092];
-        DatagramPacket recvPacket = new DatagramPacket(recvBuffer, recvBuffer.length);
-        System.out.println("\nWaiting for a new packet: ...");
-        this.datagramSocket.receive(recvPacket);
-        return new String(recvPacket.getData(), 0, recvPacket.getLength());
-    }
-    private void sendMcastMessage(String msg) throws IOException {
-        if (msg == null) return;
-        byte[] sndBuffer = msg.getBytes();
-        DatagramPacket sndPacket = new DatagramPacket(sndBuffer, sndBuffer.length, this.mcastAddr, this.mcastPort);
-        System.out.println("Sending message to " + this.mcastAddr + ":" + this.mcastPort);
-        this.datagramSocket.send(sndPacket);
-
-    }
-
     private void initializeMembership() {
         // TODO
     }
@@ -96,8 +84,8 @@ public class Store implements IMembership{
             this.datagramSocket.joinGroup(new InetSocketAddress(this.mcastAddr, 0), networkInterface);
 
             // Notice cluster members of my join
-            String msg = MessageBuilder.messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            sendMcastMessage(msg);
+            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            sendMcastMessage(msg, this.datagramSocket, this.mcastAddr, this.mcastPort);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -115,14 +103,14 @@ public class Store implements IMembership{
         }
         try {
             this.membershipCounter++;
+
+            // Notice cluster members of my leave
+            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            sendMcastMessage(msg, this.datagramSocket, this.mcastAddr, this.mcastPort);
+
             this.datagramSocket.leaveGroup(new InetSocketAddress(this.mcastAddr, 0), this.networkInterface);
             this.datagramSocket = null;
             this.networkInterface = null;
-
-            // Notice cluster members of my leave
-            String msg = MessageBuilder.messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            sendMcastMessage(msg);
-
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
