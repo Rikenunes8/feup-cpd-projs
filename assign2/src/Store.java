@@ -14,8 +14,9 @@ public class Store implements IMembership{
     private int membershipCounter;
     private MembershipLog membershipLog;
 
+    private final NetworkInterface networkInterface;
+    private final InetSocketAddress inetSocketAddress;
     private DatagramSocket datagramSocket;
-    private NetworkInterface networkInterface;
 
     public static void main(String[] args) throws IOException {
         Store store = parseArgs(args);
@@ -61,7 +62,14 @@ public class Store implements IMembership{
         this.membershipLog = null; // TODO
 
         this.datagramSocket = null;
-        this.networkInterface = null;
+
+        String networkInterfaceStr = "loopback"; // TODO
+        try {
+            this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
+            this.inetSocketAddress = new InetSocketAddress(this.mcastAddr, 0);
+        } catch (SocketException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void initializeMembership() {
@@ -76,12 +84,9 @@ public class Store implements IMembership{
         }
         try {
             this.membershipCounter++;
-            this.datagramSocket = new DatagramSocket(null);
+            this.datagramSocket = new DatagramSocket(this.mcastPort);
             this.datagramSocket.setReuseAddress(true);
-            this.datagramSocket.bind(new InetSocketAddress(this.mcastPort));
-            String networkInterfaceStr = "loopback"; // TODO
-            this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
-            this.datagramSocket.joinGroup(new InetSocketAddress(this.mcastAddr, 0), networkInterface);
+            this.datagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
 
             // Notice cluster members of my join
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
@@ -108,9 +113,8 @@ public class Store implements IMembership{
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
             sendMcastMessage(msg, this.datagramSocket);
 
-            this.datagramSocket.leaveGroup(new InetSocketAddress(this.mcastAddr, 0), this.networkInterface);
+            this.datagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
             this.datagramSocket = null;
-            this.networkInterface = null;
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
