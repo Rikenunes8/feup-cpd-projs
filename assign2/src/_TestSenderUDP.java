@@ -2,7 +2,7 @@ import java.io.IOException;
 import java.net.*;
 import java.util.Date;
 
-public class _TestingServer {
+public class _TestSenderUDP {
     public static void main(String[] args) throws IOException {
         DatagramSocket s = null;
         int port = 0, period = 0;

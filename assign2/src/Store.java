@@ -1,8 +1,9 @@
 import static messages.MessageBuilder.*;
 import static messages.MulticastMessager.*;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.*;
+import java.util.Date;
 
 
 public class Store implements IMembership{
@@ -18,16 +19,17 @@ public class Store implements IMembership{
     private final InetSocketAddress inetSocketAddress;
     private DatagramSocket datagramSocket;
 
+    // TODO everything
     public static void main(String[] args) throws IOException {
         Store store = parseArgs(args);
-        store.join();
-
-        for (int i = 0; i < 5; i++) { // TODO
+        //store.join();
+        store.readTCP();
+        for (int i = 0; i < 0; i++) { // TODO
             String date = receiveMcastMessage(store.datagramSocket);
             System.out.println("Right now it is " + date);
         }
 
-        store.leave();
+        //store.leave();
     }
 
     private static Store parseArgs(String[] args) {
@@ -121,5 +123,33 @@ public class Store implements IMembership{
             throw new RuntimeException(e);
         }
         return true;
+    }
+
+    public String readTCP() {
+        try (ServerSocket serverSocket = new ServerSocket(this.storePort)) {
+
+            System.out.println("Server is listening on port " + this.storePort);
+            int i = 0;
+            while (i < 3) {
+                Socket socket = serverSocket.accept();
+
+                InputStream input = socket.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+
+                String time = reader.readLine();
+
+                System.out.println("New client connected: "+ time);
+
+                OutputStream output = socket.getOutputStream();
+                PrintWriter writer = new PrintWriter(output, true);
+
+                writer.println(new Date().toString());
+                i++;
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return null;
     }
 }
