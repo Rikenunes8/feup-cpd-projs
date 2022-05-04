@@ -16,8 +16,8 @@ public class MessageBuilder {
      * Creates a Join/Leave message with the parameters given
      * @param nodeIP String with the Node IP address
      * @param port Int with the port associated with the node
-     * @param membershipCounter Int with the membership counter associated with th given node, even values mean
-     *                          it's a join message, odd values mean it's a leave message
+     * @param membershipCounter Int with the membership counter associated with the given node, <b>even</b> values mean
+     *                          it's a <b>join</b> message, <b>odd</b> values mean it's a <b>leave</b> message
      * @return String containing only a header correctly formatted
      */
     public static String messageJoinLeave(String nodeIP, int port, int membershipCounter) {
@@ -34,10 +34,10 @@ public class MessageBuilder {
     }
 
     /**
-     * Creates a Store Message based on the parameters given
-     * @param operation String with the operation to transmit, could be "PUT", "GET" or "DELETE"
-     * @param key String with the key *NOT ENCODED*
-     * @param value String with the value associated with the key *NOT ENCODED*
+     * Creates a Store Message based on the parameters given, <b>should only be used with "PUT" operation</b>
+     * @param operation String with the operation to transmit, <b>should be "PUT"</b>
+     * @param key String with the key <b>NOT ENCODED</b>
+     * @param value String with the value associated with the key <b>NOT ENCODED</b>
      * @return String with a header and body correctly formatted
      */
     public static String messageStore(String operation, String key, String value) {
@@ -49,14 +49,64 @@ public class MessageBuilder {
 
         StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
 
-        // BODY
-        if(operation.equals(PUT))
+        // BODY ?
+        if(operation.equalsIgnoreCase(PUT))
             message.append(value);
-        else {
-            message.append("NO VALUE IN ");
-            message.append(operation);
-            message.append(" MESSAGES");
+
+        return message.toString();
+    }
+
+    /**
+     * Creates a Store Message based on the parameters given, should be used with "GET" and "DELETE"
+     * @param operation String with the operation to transmit, could be "GET" or "DELETE"
+     * @param key String with the key <b>NOT ENCODED</b>
+     * @return String with a header and body correctly formatted
+     */
+    public static String messageStore(String operation, String key) {
+
+        // Setting up the header
+        Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("Operation", operation);
+        headerLines.put("Key", key);
+
+        // NO BODY
+
+        return buildHeader(headerLines);
+    }
+
+    /**
+     * Creates a membership message based on the parameters given
+     * @param membershipLogs List of Strings with a max size of 32, containing the most recent membership log info
+     * @param membershipTable Map of String to String, contains information about all the nodes according to a specific
+     *                        node, formatting should be <b>NodeIP: MembershipCounter</b>
+     * @param sendNodeIP String with the IP of the sender Node, used for the header only
+     * @return String with a header and a body correctly formatted
+     */
+    public static String membershipMessage(List<String> membershipLogs, Map<String, String> membershipTable,
+                                           String sendNodeIP){
+
+        // Setting up the header
+        Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("NodeIP", sendNodeIP);
+
+        StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
+
+        // BODY
+
+        // Membership Table
+        for (Map.Entry<String, String> entry : membershipTable.entrySet()){
+            message.append(entry.getKey());
+            message.append(": ");
+            message.append(entry.getValue());
+            message.append("\n");
         }
+
+        // Membership Logs
+        for(String log : membershipLogs){
+            message.append(log);
+            message.append("\n");
+        }
+
 
         return message.toString();
     }
