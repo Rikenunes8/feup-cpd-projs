@@ -1,6 +1,5 @@
 package messages;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,13 +75,13 @@ public class MessageBuilder {
 
     /**
      * Creates a membership message based on the parameters given
-     * @param membershipLogs List of Strings with a max size of 32, containing the most recent membership log info
-     * @param membershipTable Map of String to String, contains information about all the nodes according to a specific
-     *                        node, formatting should be <b>NodeIP: MembershipCounter</b>
+     * @param membershipLog MembershipLog with a max size of 32, containing the most recent membership log info
+     * @param membershipTable MembershipTable, contains information about all the nodes in current use according
+     *                        to a specific node
      * @param sendNodeIP String with the IP of the sender Node, used for the header only
      * @return String with a header and a body correctly formatted
      */
-    public static String membershipMessage(List<String> membershipLogs, Map<String, String> membershipTable,
+    public static String membershipMessage(MembershipLog membershipLog, MembershipTable membershipTable,
                                            String sendNodeIP){
 
         // Setting up the header
@@ -92,21 +91,8 @@ public class MessageBuilder {
         StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
 
         // BODY
-
-        // Membership Table
-        for (Map.Entry<String, String> entry : membershipTable.entrySet()){
-            message.append(entry.getKey());
-            message.append(": ");
-            message.append(entry.getValue());
-            message.append("\n");
-        }
-
-        // Membership Logs
-        for(String log : membershipLogs){
-            message.append(log);
-            message.append("\n");
-        }
-
+        message.append(membershipTable.toString());
+        message.append(membershipLog.toString());
 
         return message.toString();
     }
