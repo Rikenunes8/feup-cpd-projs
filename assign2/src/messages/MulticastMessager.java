@@ -13,9 +13,7 @@ public class MulticastMessager {
         datagramSocket.receive(recvPacket);
         return new String(recvPacket.getData(), 0, recvPacket.getLength());
     }
-    public static void sendMcastMessage(String msg, DatagramSocket datagramSocket) throws IOException {
-        InetAddress mcastAddr = datagramSocket.getInetAddress();
-        int mcastPort = datagramSocket.getPort();
+    public static void sendMcastMessage(String msg, DatagramSocket datagramSocket, InetAddress mcastAddr, int mcastPort) throws IOException {
         if (msg == null) return;
         byte[] sndBuffer = msg.getBytes();
         DatagramPacket sndPacket = new DatagramPacket(sndBuffer, sndBuffer.length, mcastAddr, mcastPort);
