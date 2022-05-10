@@ -145,32 +145,4 @@ public class Store implements IMembership{
         }
         return true;
     }
-
-    public String readTCP() {
-        try (ServerSocket serverSocket = new ServerSocket(this.storePort)) {
-
-            System.out.println("Store (" + this.nodeIP +") is listening on port " + this.storePort);
-            int i = 0;
-            while (i < 3) {
-                Socket socket = serverSocket.accept();
-
-                InputStream input = socket.getInputStream();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-
-                String time = reader.readLine();
-
-                System.out.println("New client connected: "+ time);
-
-                OutputStream output = socket.getOutputStream();
-                PrintWriter writer = new PrintWriter(output, true);
-
-                writer.println(new Date());
-                i++;
-            }
-
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return null;
-    }
 }
