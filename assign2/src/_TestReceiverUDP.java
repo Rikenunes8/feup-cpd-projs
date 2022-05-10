@@ -5,8 +5,9 @@ public class _TestReceiverUDP {
     static NetworkInterface inIf = null;
 
     static DatagramSocket join(InetAddress group, int port, String netIfStr) throws Exception {
-        DatagramSocket s = new DatagramSocket(port);
+        DatagramSocket s = new DatagramSocket(null);
         s.setReuseAddress(true);
+        s.bind(new InetSocketAddress(port));
         inIf = NetworkInterface.getByName(netIfStr);
         s.joinGroup(new InetSocketAddress(group, port), inIf);
         return s;

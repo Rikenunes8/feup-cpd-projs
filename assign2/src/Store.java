@@ -78,7 +78,7 @@ public class Store implements IMembership{
         String networkInterfaceStr = "loopback"; // TODO
 
         try {
-            this.sndDatagramSocket = new DatagramSocket(0);
+            this.sndDatagramSocket = new DatagramSocket();
             this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
             this.inetSocketAddress = new InetSocketAddress(this.mcastAddr, this.mcastPort);
 
@@ -106,7 +106,7 @@ public class Store implements IMembership{
             this.membershipCounter++;
             this.rcvDatagramSocket = new DatagramSocket(null);
             this.rcvDatagramSocket.setReuseAddress(true);
-            this.rcvDatagramSocket.bind(this.inetSocketAddress);
+            this.rcvDatagramSocket.bind(new InetSocketAddress(this.mcastPort));
             this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
 
             // Notice cluster members of my join
