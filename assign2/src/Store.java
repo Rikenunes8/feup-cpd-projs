@@ -22,7 +22,7 @@ public class Store implements IMembership{
     private DatagramSocket sndDatagramSocket;
 
     // TODO everything
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, IOException {
         Store store = parseArgs(args);
 
         // Start accepting TCP connections and collect membership views
@@ -37,6 +37,12 @@ public class Store implements IMembership{
         System.out.println("Printing views");
         for (var view : membershipViews) {
             System.out.println(view);
+        }
+
+        while (true) {
+            String msg = receiveMcastMessage(store.rcvDatagramSocket);
+            System.out.println(msg);
+            if (msg.equals("quit")) break;
         }
 
         store.leave();

@@ -23,7 +23,7 @@ public class MembershipColector extends Thread {
 
             System.out.println("Store (" + this.id +") is listening on port " + this.port);
             int i = 0;
-            while (i < 3) {
+            while (i < 1) {
                 Socket socket = serverSocket.accept();
                 System.out.println("New client connected");
 
