@@ -3,7 +3,9 @@ import static messages.MulticastMessager.*;
 
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 
 public class Store implements IMembership{
@@ -20,10 +22,19 @@ public class Store implements IMembership{
     private DatagramSocket datagramSocket;
 
     // TODO everything
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         Store store = parseArgs(args);
+        MembershipColector t = new MembershipColector(store.nodeIP, store.storePort);
+        t.start();
+        t.join();
+
+        List<String> membershipViews = t.getMembershipViews();
+        System.out.println("Printing views");
+        for (var view : membershipViews) {
+            System.out.println(view);
+        }
+
         //store.join();
-        store.readTCP();
         for (int i = 0; i < 0; i++) { // TODO
             String date = receiveMcastMessage(store.datagramSocket);
             System.out.println("Right now it is " + date);
@@ -128,7 +139,7 @@ public class Store implements IMembership{
     public String readTCP() {
         try (ServerSocket serverSocket = new ServerSocket(this.storePort)) {
 
-            System.out.println("Server is listening on port " + this.storePort);
+            System.out.println("Store (" + this.nodeIP +") is listening on port " + this.storePort);
             int i = 0;
             while (i < 3) {
                 Socket socket = serverSocket.accept();
