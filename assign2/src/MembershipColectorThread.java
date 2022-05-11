@@ -2,15 +2,14 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
-public class MembershipColector extends Thread {
+public class MembershipColectorThread extends Thread {
     private final String id;
     private final int port;
     private List<String> membershipViews;
 
-    public MembershipColector(String id, int port) {
+    public MembershipColectorThread(String id, int port) {
         this.id = id;
         this.port = port;
         this.membershipViews = new ArrayList<>();
@@ -18,7 +17,7 @@ public class MembershipColector extends Thread {
 
     @Override
     public void run() {
-        List<MembershipReader> threads = new ArrayList<>();
+        List<MembershipReaderThread> threads = new ArrayList<>();
         try (ServerSocket serverSocket = new ServerSocket(this.port)) {
 
             System.out.println("Store (" + this.id +") is listening on port " + this.port);
@@ -27,12 +26,12 @@ public class MembershipColector extends Thread {
                 Socket socket = serverSocket.accept();
                 System.out.println("New client connected");
 
-                MembershipReader reader = new MembershipReader(socket);
+                MembershipReaderThread reader = new MembershipReaderThread(socket);
                 threads.add(reader);
                 reader.start();
                 i++;
             }
-            for (MembershipReader reader : threads) {
+            for (MembershipReaderThread reader : threads) {
                 reader.join();
                 membershipViews.add(reader.getMessage());
             }

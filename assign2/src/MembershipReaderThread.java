@@ -1,11 +1,11 @@
 import java.io.*;
 import java.net.Socket;
 
-public class MembershipReader extends Thread {
+public class MembershipReaderThread extends Thread {
     private final Socket socket;
     private String message;
 
-    public MembershipReader(Socket socket) {
+    public MembershipReaderThread(Socket socket) {
         this.socket = socket;
     }
 

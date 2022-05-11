@@ -26,14 +26,14 @@ public class Store implements IMembership{
         Store store = parseArgs(args);
 
         // Start accepting TCP connections and collect membership views
-        MembershipColector membershipColector = new MembershipColector(store.nodeIP, store.storePort);
-        membershipColector.start();
+        MembershipColectorThread membershipColectorThread = new MembershipColectorThread(store.nodeIP, store.storePort);
+        membershipColectorThread.start();
 
         store.join();
 
 
-        membershipColector.join();
-        List<String> membershipViews = membershipColector.getMembershipViews();
+        membershipColectorThread.join();
+        List<String> membershipViews = membershipColectorThread.getMembershipViews();
         System.out.println("Printing views");
         for (var view : membershipViews) {
             System.out.println(view);
