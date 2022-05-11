@@ -26,32 +26,32 @@ public class Store extends UnicastRemoteObject implements IMembership{
     private DatagramSocket sndDatagramSocket;
 
     // TODO everything
-    public static void main(String[] args) throws InterruptedException, IOException {
+    public static void main(String[] args) throws RemoteException {
         Store store = parseArgs(args);
         Registry registry = LocateRegistry.createRegistry(store.storePort);
         registry.rebind("membership", store);
 
 
         // Start accepting TCP connections and collect membership views
-        MembershipColectorThread membershipColectorThread = new MembershipColectorThread(store.nodeIP, store.storePort);
-        membershipColectorThread.start();
-
-        store.join();
-
-        membershipColectorThread.join();
-        List<String> membershipViews = membershipColectorThread.getMembershipViews();
-        System.out.println("Printing views");
-        for (var view : membershipViews) {
-            System.out.println(view);
-        }
-
-        while (true) {
-            String msg = receiveMcastMessage(store.rcvDatagramSocket);
-            System.out.println(msg);
-            if (msg.equals("quit")) break;
-        }
-
-        store.leave();
+//        MembershipColectorThread membershipColectorThread = new MembershipColectorThread(store.nodeIP, store.storePort);
+//        membershipColectorThread.start();
+//
+//        store.join();
+//
+//        membershipColectorThread.join();
+//        List<String> membershipViews = membershipColectorThread.getMembershipViews();
+//        System.out.println("Printing views");
+//        for (var view : membershipViews) {
+//            System.out.println(view);
+//        }
+//
+//        while (true) {
+//            String msg = receiveMcastMessage(store.rcvDatagramSocket);
+//            System.out.println(msg);
+//            if (msg.equals("quit")) break;
+//        }
+//
+//        store.leave();
     }
 
     private static Store parseArgs(String[] args) throws RemoteException {
@@ -110,7 +110,8 @@ public class Store extends UnicastRemoteObject implements IMembership{
     }
 
     @Override
-    public boolean join() {
+    public boolean join() throws RemoteException{
+        System.out.println("called");
         if (this.membershipCounter % 2 == 0) {
             System.out.println("This node already belongs to a multicast group");
             return false;
@@ -127,6 +128,12 @@ public class Store extends UnicastRemoteObject implements IMembership{
             String msg = new Date().toString();
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
             System.out.println("Join message sent!");
+
+            while (true) {
+                String msg1 = receiveMcastMessage(this.rcvDatagramSocket);
+                System.out.println(msg1);
+                if (msg1.equals("quit")) break;
+            }
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);

@@ -4,7 +4,7 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.util.regex.Pattern;
 
-public class _TestClient {
+public class TestClient {
 
     public static void main(String[] args) throws MalformedURLException, NotBoundException, RemoteException {
         String correctInput = """
@@ -19,24 +19,30 @@ public class _TestClient {
             System.out.println("Wrong number of expected arguments. \n" + correctInput);
             return;
         }
-
+/*
         if (!isValidNodeAccessPoint("UDP", args[0])) {
             System.out.println("Wrong node access point representation according to the implementation. \n" + correctInput);
             return;
-        }
+        }*/
 
         String nodeAC = args[0];
         String operation = args[1];
 
         switch (operation) {
             case "join" -> {System.out.println("perform join operation nodeAC = " + nodeAC);
-                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/hello");
+                System.out.println(nodeAC);
+                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/membership");
+                System.out.println("Have service");
                 service.join();
+                System.out.println("Join called");
             }
             case "leave" -> {
+                System.out.println(nodeAC);
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
-                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/hello");
+                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/membership");
+                System.out.println("Have service");
                 service.leave();
+                System.out.println("Leave called");
             }
             case "put" -> {
                 if (args.length != 4) {
