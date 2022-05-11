@@ -4,7 +4,9 @@ import static messages.MulticastMessager.*;
 import java.io.*;
 import java.net.*;
 import java.util.Date;
-import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 
 public class Store implements IMembership{
@@ -21,31 +23,35 @@ public class Store implements IMembership{
     private DatagramSocket rcvDatagramSocket;
     private DatagramSocket sndDatagramSocket;
 
+    private ExecutorService executor;
+
     // TODO everything
-    public static void main(String[] args) throws InterruptedException, IOException {
+    public static void main(String[] args) {
         Store store = parseArgs(args);
 
-        // Start accepting TCP connections and collect membership views
-        MembershipColectorThread membershipColectorThread = new MembershipColectorThread(store.nodeIP, store.storePort);
-        membershipColectorThread.start();
-
-        store.join();
-
-
-        membershipColectorThread.join();
-        List<String> membershipViews = membershipColectorThread.getMembershipViews();
-        System.out.println("Printing views");
-        for (var view : membershipViews) {
-            System.out.println(view);
-        }
+        ExecutorService executor = Executors.newWorkStealingPool(1);
 
         while (true) {
-            String msg = receiveMcastMessage(store.rcvDatagramSocket);
-            System.out.println(msg);
-            if (msg.equals("quit")) break;
-        }
+            System.out.println("New thread");
+            //Runnable work = new DispatcherThread(store);
+            //executor.execute(work);
 
-        store.leave();
+            try (ServerSocket serverSocket = new ServerSocket(store.getPort())){
+                Socket socket = serverSocket.accept();
+
+                InputStream input = socket.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+
+                String msg = reader.readLine();
+                switch (msg) {
+                    case "join" -> store.join();
+                    case "leave" -> store.leave();
+                }
+                socket.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private static Store parseArgs(String[] args) {
@@ -75,6 +81,9 @@ public class Store implements IMembership{
         this.mcastPort = mcastPort;
         this.nodeIP = nodeIP;
         this.storePort = storePort;
+
+        this.executor = Executors.newWorkStealingPool(1);
+
 
         this.membershipCounter = -1;
         this.membershipLog = null; // TODO
@@ -117,9 +126,12 @@ public class Store implements IMembership{
 
             // Notice cluster members of my join
             // String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            String msg = new Date().toString();
+            String msg = "Joining " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
             System.out.println("Join message sent!");
+
+            Runnable work = new DispatcherMcastThread(this);
+            executor.execute(work);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -139,11 +151,23 @@ public class Store implements IMembership{
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            // String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            String msg = "Leaving " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
+
+            this.executor.shutdown();
+            System.out.println("Shutting down...");
+            executor.awaitTermination(1, TimeUnit.SECONDS);
+            System.out.println("Wait enough");
+            if (!executor.isTerminated()) {
+                System.out.println("Forcing shut down");
+                executor.shutdownNow();
+                System.out.println("Shut down complete");
+            }
 
             this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
             this.rcvDatagramSocket = null;
+
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
@@ -151,4 +175,40 @@ public class Store implements IMembership{
         }
         return true;
     }
+
+    public int getPort() {
+        return this.storePort;
+    }
+
+    public DatagramSocket getRcvDatagramSocket() {
+        return this.rcvDatagramSocket;
+    }
+
+    public int getMembershipCounter() {
+        return this.membershipCounter;
+    }
 }
+
+
+
+          // Start accepting TCP connections and collect membership views
+//        MembershipColectorThread membershipColectorThread = new MembershipColectorThread(store.nodeIP, store.storePort);
+//        membershipColectorThread.start();
+//
+//        store.join();
+//
+//
+//        membershipColectorThread.join();
+//        List<String> membershipViews = membershipColectorThread.getMembershipViews();
+//        System.out.println("Printing views");
+//        for (var view : membershipViews) {
+//            System.out.println(view);
+//        }
+//
+//        while (true) {
+//            String msg = receiveMcastMessage(store.rcvDatagramSocket);
+//            System.out.println(msg);
+//            if (msg.equals("quit")) break;
+//        }
+//
+//        store.leave();

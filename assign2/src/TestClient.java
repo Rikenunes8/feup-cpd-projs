@@ -1,6 +1,10 @@
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.util.regex.Pattern;
 
-public class _TestClient {
+public class TestClient {
 
     public static void main(String[] args) {
         String correctInput = """
@@ -23,10 +27,31 @@ public class _TestClient {
 
         String nodeAC = args[0];
         String operation = args[1];
+        String[] nodeACsep = nodeAC.split(":");
+        String nodeIP = nodeACsep[0];
+        int nodePort = Integer.parseInt(nodeACsep[1]);
 
         switch (operation) {
-            case "join" -> System.out.println("perform join operation nodeAC = " + nodeAC);
-            case "leave" -> System.out.println("perform leave operation nodeAC = " + nodeAC);
+            case "join" -> {
+                System.out.println("perform join operation nodeAC = " + nodeAC);
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    OutputStream output = socket.getOutputStream();
+                    PrintWriter writer = new PrintWriter(output, true);
+                    writer.println("join");
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            case "leave" ->{
+                System.out.println("perform leave operation nodeAC = " + nodeAC);
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    OutputStream output = socket.getOutputStream();
+                    PrintWriter writer = new PrintWriter(output, true);
+                    writer.println("leave");
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
             case "put" -> {
                 if (args.length != 4) {
                     System.out.println("Excepted 2 Operation Argument since is a PUT key-value operation. \n" + correctInput);
