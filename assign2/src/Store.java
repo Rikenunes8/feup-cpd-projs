@@ -82,8 +82,6 @@ public class Store implements IMembership{
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
-        this.executor = Executors.newWorkStealingPool(1);
-
 
         this.membershipCounter = -1;
         this.membershipLog = null; // TODO
@@ -130,8 +128,9 @@ public class Store implements IMembership{
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
             System.out.println("Join message sent!");
 
+            this.executor = Executors.newWorkStealingPool(1);
             Runnable work = new DispatcherMcastThread(this);
-            executor.execute(work);
+            this.executor.execute(work);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
