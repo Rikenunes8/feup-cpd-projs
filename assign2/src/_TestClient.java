@@ -1,8 +1,12 @@
+import java.net.MalformedURLException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
 import java.util.regex.Pattern;
 
 public class _TestClient {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws MalformedURLException, NotBoundException, RemoteException {
         String correctInput = """
                 java TestClient <node_ap> <operation> [<opnd>]\s
                   <node_ap> : IP:PORT (UDP or TCP) | name of the remote object (RMI)
@@ -25,8 +29,15 @@ public class _TestClient {
         String operation = args[1];
 
         switch (operation) {
-            case "join" -> System.out.println("perform join operation nodeAC = " + nodeAC);
-            case "leave" -> System.out.println("perform leave operation nodeAC = " + nodeAC);
+            case "join" -> {System.out.println("perform join operation nodeAC = " + nodeAC);
+                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/hello");
+                service.join();
+            }
+            case "leave" -> {
+                System.out.println("perform leave operation nodeAC = " + nodeAC);
+                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/hello");
+                service.leave();
+            }
             case "put" -> {
                 if (args.length != 4) {
                     System.out.println("Excepted 2 Operation Argument since is a PUT key-value operation. \n" + correctInput);

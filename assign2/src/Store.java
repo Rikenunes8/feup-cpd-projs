@@ -3,11 +3,15 @@ import static messages.MulticastMessager.*;
 
 import java.io.*;
 import java.net.*;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
 import java.util.Date;
 import java.util.List;
 
 
-public class Store implements IMembership{
+public class Store extends UnicastRemoteObject implements IMembership{
     private final InetAddress mcastAddr;
     private final int mcastPort;
     private final String nodeIP;
@@ -24,13 +28,15 @@ public class Store implements IMembership{
     // TODO everything
     public static void main(String[] args) throws InterruptedException, IOException {
         Store store = parseArgs(args);
+        Registry registry = LocateRegistry.createRegistry(store.storePort);
+        registry.rebind("membership", store);
+
 
         // Start accepting TCP connections and collect membership views
         MembershipColectorThread membershipColectorThread = new MembershipColectorThread(store.nodeIP, store.storePort);
         membershipColectorThread.start();
 
         store.join();
-
 
         membershipColectorThread.join();
         List<String> membershipViews = membershipColectorThread.getMembershipViews();
@@ -48,7 +54,7 @@ public class Store implements IMembership{
         store.leave();
     }
 
-    private static Store parseArgs(String[] args) {
+    private static Store parseArgs(String[] args) throws RemoteException {
         InetAddress mcastAddr;
         int mcastPort;
         String nodeIP;
@@ -70,7 +76,8 @@ public class Store implements IMembership{
         return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
     }
 
-    public Store(InetAddress mcastAddr, int mcastPort, String nodeIP, int storePort) {
+    public Store(InetAddress mcastAddr, int mcastPort, String nodeIP, int storePort) throws RemoteException {
+        super();
         this.mcastAddr = mcastAddr;
         this.mcastPort = mcastPort;
         this.nodeIP = nodeIP;
