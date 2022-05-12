@@ -29,25 +29,17 @@ public class Store implements IMembership{
     public static void main(String[] args) {
         Store store = parseArgs(args);
 
-        ExecutorService executor = Executors.newWorkStealingPool(1);
+        // ExecutorService executor = Executors.newWorkStealingPool(1);
+        ExecutorService executor = Executors.newFixedThreadPool(8);
 
         while (true) {
             System.out.println("New thread");
-            //Runnable work = new DispatcherThread(store);
-            //executor.execute(work);
 
             try (ServerSocket serverSocket = new ServerSocket(store.getPort())){
                 Socket socket = serverSocket.accept();
 
-                InputStream input = socket.getInputStream();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-
-                String msg = reader.readLine();
-                switch (msg) {
-                    case "join" -> store.join();
-                    case "leave" -> store.leave();
-                }
-                socket.close();
+                Runnable work = new DispatcherThread(socket, store);
+                executor.execute(work);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
