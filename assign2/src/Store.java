@@ -1,4 +1,3 @@
-import static messages.MessageBuilder.*;
 import static messages.MulticastMessager.*;
 
 import java.io.*;
@@ -23,7 +22,7 @@ public class Store implements IMembership{
     private DatagramSocket rcvDatagramSocket;
     private DatagramSocket sndDatagramSocket;
 
-    private ExecutorService executor;
+    private ExecutorService executorMcast;
 
     // TODO everything
     public static void main(String[] args) {
@@ -120,9 +119,9 @@ public class Store implements IMembership{
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
             System.out.println("Join message sent!");
 
-            this.executor = Executors.newWorkStealingPool(1);
-            Runnable work = new DispatcherMcastThread(this);
-            this.executor.execute(work);
+            this.executorMcast = Executors.newWorkStealingPool(1);
+            Runnable work = new ListenerMcastThread(this);
+            this.executorMcast.execute(work);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -146,13 +145,13 @@ public class Store implements IMembership{
             String msg = "Leaving " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
 
-            this.executor.shutdown();
+            this.executorMcast.shutdown();
             System.out.println("Shutting down...");
-            executor.awaitTermination(1, TimeUnit.SECONDS);
+            executorMcast.awaitTermination(1, TimeUnit.SECONDS);
             System.out.println("Wait enough");
-            if (!executor.isTerminated()) {
+            if (!executorMcast.isTerminated()) {
                 System.out.println("Forcing shut down");
-                executor.shutdownNow();
+                executorMcast.shutdownNow();
                 System.out.println("Shut down complete");
             }
 
