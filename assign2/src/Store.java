@@ -1,4 +1,7 @@
+import messages.MembershipInfo;
 import messages.MembershipLog;
+import messages.MembershipLogRecord;
+import messages.MembershipTable;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
@@ -19,6 +22,7 @@ public class Store implements IMembership{
 
     private int membershipCounter;
     private MembershipLog membershipLog;
+    private MembershipTable membershipTable;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -78,7 +82,8 @@ public class Store implements IMembership{
 
 
         this.membershipCounter = -1;
-        this.membershipLog = null; // TODO
+        this.membershipLog = new MembershipLog(); // TODO
+        this.membershipTable = new MembershipTable(); // TODO
 
         this.rcvDatagramSocket = null;
         this.sndDatagramSocket = null;
@@ -169,7 +174,14 @@ public class Store implements IMembership{
         return true;
     }
 
+    public void addJoinLeaveEvent(String nodeIP, int port, int membershipCounter) {
+        if (membershipCounter % 2 == 0)
+            this.membershipTable.addMembershipInfo(new MembershipInfo(nodeIP, port));
+        else
+            this.membershipTable.removeMembershipInfo(new MembershipInfo(nodeIP, port));
 
+        this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
+    }
 
     public int getPort() {
         return this.storePort;
@@ -181,6 +193,14 @@ public class Store implements IMembership{
 
     public int getMembershipCounter() {
         return this.membershipCounter;
+    }
+
+    public MembershipLog getMembershipLog() {
+        return membershipLog;
+    }
+
+    public MembershipTable getMembershipTable() {
+        return membershipTable;
     }
 }
 

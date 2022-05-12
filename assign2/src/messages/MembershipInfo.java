@@ -1,13 +1,15 @@
 package messages;
 
+import java.util.Objects;
+
 public class MembershipInfo {
 
-    private String IP;
-    private int Port;
+    private String ip;
+    private int port;
 
-    @Override
-    public String toString(){
-        return IP + ": " + Port;
+    public MembershipInfo(String ip, int port) {
+        this.ip = ip;
+        this.port = port;
     }
 
     public static String getIPFromString(String rec){
@@ -18,4 +20,21 @@ public class MembershipInfo {
         return rec.substring(rec.length() - 5, rec.length()-1);
     }
 
+    @Override
+    public String toString(){
+        return ip + ": " + port;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MembershipInfo that = (MembershipInfo) o;
+        return this.port == that.port && Objects.equals(this.ip, that.ip);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(ip, port);
+    }
 }

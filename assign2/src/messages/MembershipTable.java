@@ -1,20 +1,24 @@
 package messages;
 
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class MembershipTable {
-    private List<MembershipInfo> membershipInfoList;
+    private Set<MembershipInfo> membershipInfoList;
+
+    public MembershipTable() {
+        this.membershipInfoList = new HashSet<>();
+    }
 
     public void addMembershipInfo(MembershipInfo mInfo){
         membershipInfoList.add(mInfo);
     }
 
     public void removeMembershipInfo(MembershipInfo mInfo){
-        // This could cause some problems, maybe need to remove at index
         membershipInfoList.remove(mInfo);
     }
 
-    public List<MembershipInfo> getMembershipInfoList() {
+    public Set<MembershipInfo> getMembershipInfoList() {
         return membershipInfoList;
     }
 

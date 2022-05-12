@@ -1,8 +1,8 @@
 package messages;
 
 public class MembershipLogRecord {
-    private String nodeIP;
-    private int counter;
+    private final String nodeIP;
+    private final int counter;
 
     public MembershipLogRecord(String nodeIP, int counter) {
         this.nodeIP = nodeIP;
