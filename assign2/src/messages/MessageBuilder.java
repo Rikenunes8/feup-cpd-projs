@@ -11,6 +11,36 @@ public class MessageBuilder {
     static final String GET = "GET";
     static final String DEL = "DELETE";
 
+    Map<String, String> header;
+    String body;
+
+    public Map<String, String> getHeader() {
+        return header;
+    }
+
+    public String getBody() {
+        return body;
+    }
+
+    public MessageBuilder(String msg) {
+        System.out.println(msg); // DEBUG
+        String[] msgArr = msg.split(Character.toString(CR) + LF + CR + LF);
+
+        String header = msgArr[0];
+        String[] headerLines = header.split(Character.toString(CR) + LF);
+        this.header = new HashMap<>();
+        System.out.println(headerLines.length); // DEBUG
+        for (String headerLine : headerLines) {
+            String[] keyVal = headerLine.split(": ");
+            this.header.put(keyVal[0], keyVal[1]);
+        }
+        this.body = msgArr.length < 2 ?  "" : msgArr[1];
+    }
+
+    public MessageBuilder(Map<String, String> header, String body) {
+        // TODO if needed
+    }
+
     /**
      * Creates a Join/Leave message with the parameters given
      * @param nodeIP String with the Node IP address
@@ -23,6 +53,7 @@ public class MessageBuilder {
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("Type", membershipCounter % 2 == 0 ? "JOIN" : "LEAVE");
         headerLines.put("NodeIP", nodeIP);
         headerLines.put("Port", String.valueOf(port));
         headerLines.put("MembershipCounter", String.valueOf(membershipCounter));
@@ -116,5 +147,4 @@ public class MessageBuilder {
         stringBuilder.append(LF);
         return stringBuilder.toString();
     }
-
 }

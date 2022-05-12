@@ -1,5 +1,6 @@
 import messages.MembershipLog;
 
+import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
 
 import java.io.*;
@@ -116,8 +117,8 @@ public class Store implements IMembership{
             this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
 
             // Notice cluster members of my join
-            // String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            String msg = "Joining " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
+            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            // String msg = "Joining " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
             System.out.println("Join message sent!");
 
@@ -143,8 +144,8 @@ public class Store implements IMembership{
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-            // String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            String msg = "Leaving " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
+            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            // String msg = "Leaving " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
 
             this.executorMcast.shutdown();
@@ -167,6 +168,8 @@ public class Store implements IMembership{
         }
         return true;
     }
+
+
 
     public int getPort() {
         return this.storePort;
