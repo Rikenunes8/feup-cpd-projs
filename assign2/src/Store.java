@@ -1,3 +1,5 @@
+import messages.MembershipLog;
+
 import static messages.MessageBuilder.*;
 import static messages.MulticastMessager.*;
 

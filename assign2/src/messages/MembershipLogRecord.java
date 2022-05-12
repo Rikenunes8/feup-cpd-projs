@@ -1,3 +1,5 @@
+package messages;
+
 public class MembershipLogRecord {
     private String nodeIP;
     private int counter;
@@ -12,5 +14,10 @@ public class MembershipLogRecord {
     }
     public int getCounter() {
         return counter;
+    }
+
+    @Override
+    public String toString(){
+        return "NodeIP: " + nodeIP + ", MembershipCounter: " + counter;
     }
 }
