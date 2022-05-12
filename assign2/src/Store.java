@@ -1,3 +1,5 @@
+import messages.MembershipLog;
+
 import static messages.MulticastMessager.*;
 
 import java.io.*;
