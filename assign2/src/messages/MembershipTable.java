@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class MembershipTable {
+
     private Set<MembershipInfo> membershipInfoList;
 
     public MembershipTable() {

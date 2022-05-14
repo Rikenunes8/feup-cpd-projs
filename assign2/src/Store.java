@@ -7,13 +7,17 @@ import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 
-public class Store implements IMembership{
+public class Store implements IMembership, IService {
     private final InetAddress mcastAddr;
     private final int mcastPort;
     private final String nodeIP;
@@ -29,6 +33,8 @@ public class Store implements IMembership{
     private DatagramSocket sndDatagramSocket;
 
     private ExecutorService executorMcast;
+
+    MessageDigest encoder;
 
     // TODO everything
     public static void main(String[] args) {
@@ -87,6 +93,13 @@ public class Store implements IMembership{
         this.rcvDatagramSocket = null;
         this.sndDatagramSocket = null;
         String networkInterfaceStr = "loopback"; // TODO
+
+
+        try {
+            encoder = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            System.out.println("SHA-256 doesn't exist!");
+        }
 
         try {
             this.sndDatagramSocket = new DatagramSocket();
@@ -167,6 +180,47 @@ public class Store implements IMembership{
         return true;
     }
 
+    @Override
+    public String put(String key, String value) {
+        // If key not defined -> is a TestClient request, otherwise is a node request
+        if(key == null){
+            // generate key according to value
+            // then find the closest node to the key that was generated
+            // if I am the closest one -> save in me
+            //     otherwise, send a put request to the node that was found with the key and value
+
+            String keyHashed = String.format("%064x", new BigInteger(1,
+                    encoder.digest(value.getBytes(StandardCharsets.UTF_8))));
+
+            String getIdHashed = String.format("%064x", new BigInteger(1,
+                    encoder.digest(this.nodeIP.getBytes(StandardCharsets.UTF_8))));
+
+            File keyFile = new File("network/" + getIdHashed + "/" + keyHashed);
+
+            if (!keyFile.exists()) if(!keyFile.createNewFile()) {
+                System.out.println("An error occurred when creating keyFile in node " + this.getIdHashed());
+                return null;
+            }
+
+            return key;
+        }
+        // else
+        // the request was from another node
+        // check if I am the closest node from the key received
+        // if true -> save in me
+        // if false -> send the put request to the closest node from the key received that I found with the key and values
+    }
+
+    @Override
+    public String get(String key) {
+        return null;
+    }
+
+    @Override
+    public boolean delete(String key) {
+        return false;
+    }
+    
 
     private void initializeMembership() {
         // TODO
