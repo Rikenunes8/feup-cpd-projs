@@ -20,10 +20,12 @@ public class DispatcherThread implements Runnable{
             InputStream input = this.socket.getInputStream();
             BufferedReader reader = new BufferedReader(new InputStreamReader(input));
 
+            // TODO: fazer parse da msg recebida (msg.getType())
             String msg = reader.readLine();
             switch (msg) {
                 case "join" -> store.join();
                 case "leave" -> store.leave();
+                
                 default -> System.out.println("Operation not implemented");
             }
             this.socket.close();

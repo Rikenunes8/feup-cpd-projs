@@ -12,6 +12,7 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +23,7 @@ public class Store implements IMembership, IService {
     private final int mcastPort;
     private final String nodeIP;
     private final int storePort;
+    private final String storage;
 
     private int membershipCounter;
     private MembershipLog membershipLog;
@@ -40,8 +42,10 @@ public class Store implements IMembership, IService {
     public static void main(String[] args) {
         Store store = parseArgs(args);
 
-        //ExecutorService executor = Executors.newWorkStealingPool(8);
-        ExecutorService executor = Executors.newFixedThreadPool(8);
+        Runtime runtime = Runtime.getRuntime();
+        // ExecutorService executor = Executors.newWorkStealingPool(8);
+        ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
+        // according to the number of processors available to the Java virtual machine
 
         while (true) {
             System.out.println("New thread");
@@ -85,7 +89,6 @@ public class Store implements IMembership, IService {
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
-
         this.membershipCounter = -1;
         this.membershipLog = new MembershipLog(); // TODO
         this.membershipTable = new MembershipTable(); // TODO
@@ -94,12 +97,13 @@ public class Store implements IMembership, IService {
         this.sndDatagramSocket = null;
         String networkInterfaceStr = "loopback"; // TODO
 
-
         try {
-            encoder = MessageDigest.getInstance("SHA-256");
+            this.encoder = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
             System.out.println("SHA-256 doesn't exist!");
         }
+
+        this.storage = getHashed(this.nodeIP);
 
         try {
             this.sndDatagramSocket = new DatagramSocket();
@@ -182,33 +186,19 @@ public class Store implements IMembership, IService {
 
     @Override
     public String put(String key, String value) {
-        // If key not defined -> is a TestClient request, otherwise is a node request
-        if(key == null){
-            // generate key according to value
-            // then find the closest node to the key that was generated
-            // if I am the closest one -> save in me
-            //     otherwise, send a put request to the node that was found with the key and value
 
-            String keyHashed = String.format("%064x", new BigInteger(1,
-                    encoder.digest(value.getBytes(StandardCharsets.UTF_8))));
+        String keyHashed = (key == null) ? getHashed(value) : key;
 
-            String getIdHashed = String.format("%064x", new BigInteger(1,
-                    encoder.digest(this.nodeIP.getBytes(StandardCharsets.UTF_8))));
-
-            File keyFile = new File("network/" + getIdHashed + "/" + keyHashed);
-
-            if (!keyFile.exists()) if(!keyFile.createNewFile()) {
-                System.out.println("An error occurred when creating keyFile in node " + this.getIdHashed());
-                return null;
-            }
-
-            return key;
+        // Save in the closest node
+        String closestNode = closestNode(keyHashed);
+        if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
+            this.saveFile(keyHashed, value);
+        } else {
+            //     otherwise, send a put request to the node that was found with the ke
         }
-        // else
-        // the request was from another node
-        // check if I am the closest node from the key received
-        // if true -> save in me
-        // if false -> send the put request to the closest node from the key received that I found with the key and values
+
+        return key;
+
     }
 
     @Override
@@ -220,7 +210,46 @@ public class Store implements IMembership, IService {
     public boolean delete(String key) {
         return false;
     }
-    
+
+
+    private String getHashed(String value) {
+        return String.format("%064x", new BigInteger(1,
+                this.encoder.digest(value.getBytes(StandardCharsets.UTF_8))));
+    }
+
+    private String closestNode(String key){
+        //TODO
+        return this.storage;
+    }
+
+    private void saveFile(String key, String value) {
+        try {
+            File keyFile = new File("network/" + this.storage + "/" + key);
+
+            if (!keyFile.exists()) {
+                if (!keyFile.createNewFile()) {
+                    System.out.println("An error occurred when creating keyFile in node " + this.storage);
+                    return;
+                }
+            }
+
+            if (!keyFile.canWrite()) {
+                System.out.println("Permission denied! Can not write value of key "
+                        + key + " in node " + this.storage);
+                return;
+            }
+
+            FileWriter keyFileWriter = new FileWriter("network/" + this.storage + "/" + key, false);
+
+            keyFileWriter.write(value);
+            keyFileWriter.close();
+
+            System.out.println("Successfully saved key-value pair in node " + this.storage);
+        } catch (IOException e) {
+            System.out.println("An error occurred when saving key-value pair in node " + this.storage);
+            e.printStackTrace();
+        }
+    }
 
     private void initializeMembership() {
         // TODO
@@ -239,15 +268,19 @@ public class Store implements IMembership, IService {
     public int getPort() {
         return this.storePort;
     }
+
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
     }
+
     public int getMembershipCounter() {
         return this.membershipCounter;
     }
+
     public MembershipLog getMembershipLog() {
         return membershipLog;
     }
+
     public MembershipTable getMembershipTable() {
         return membershipTable;
     }

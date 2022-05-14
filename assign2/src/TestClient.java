@@ -33,23 +33,11 @@ public class TestClient {
         switch (operation) {
             case "join" -> {
                 System.out.println("perform join operation nodeAC = " + nodeAC);
-                try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    OutputStream output = socket.getOutputStream();
-                    PrintWriter writer = new PrintWriter(output, true);
-                    writer.println("join");
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                sendMessage(nodeIP, nodePort, "join");
             }
             case "leave" ->{
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
-                try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    OutputStream output = socket.getOutputStream();
-                    PrintWriter writer = new PrintWriter(output, true);
-                    writer.println("leave");
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                sendMessage(nodeIP, nodePort, "leave");
             }
             case "put" -> {
                 if (args.length != 4) {
@@ -57,8 +45,9 @@ public class TestClient {
                     return;
                 }
                 String filename = args[2];
-                System.out.println("perform join operation nodeAC= " + nodeAC + " , filename= " + filename);
-
+                System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
+                String value = readFile(filename);
+                sendMessage(nodeIP, nodePort, "put " + value);
             }
             case "get" -> {
                 if (args.length != 3) {
@@ -67,6 +56,7 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
+                sendMessage(nodeIP, nodePort, "get " + key);
             }
             case "delete" -> {
                 if (args.length != 3) {
@@ -75,6 +65,7 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
+                sendMessage(nodeIP, nodePort, "delete " + key);
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }
@@ -98,6 +89,16 @@ public class TestClient {
         }
     }
 
+    private static void sendMessage(String nodeIP, int nodePort, String msg) {
+        try (Socket socket = new Socket(nodeIP, nodePort)) {
+            OutputStream output = socket.getOutputStream();
+            PrintWriter writer = new PrintWriter(output, true);
+            writer.println(msg);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static String readFile(String pathname) {
         File keyFile = new File(pathname);
         if (!keyFile.exists()) {
@@ -116,10 +117,8 @@ public class TestClient {
             }
             return value.toString();
         } catch (FileNotFoundException e) {
-
+            System.out.println("Error reading file " + pathname);
+            return null;
         }
-
-
     }
-
 }
