@@ -8,7 +8,6 @@ import static messages.MulticastMessager.*;
 
 import java.io.*;
 import java.net.*;
-import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -35,7 +34,7 @@ public class Store implements IMembership{
     public static void main(String[] args) {
         Store store = parseArgs(args);
 
-        // ExecutorService executor = Executors.newWorkStealingPool(1);
+        //ExecutorService executor = Executors.newWorkStealingPool(8);
         ExecutorService executor = Executors.newFixedThreadPool(8);
 
         while (true) {
@@ -104,10 +103,6 @@ public class Store implements IMembership{
         }
     }
 
-    private void initializeMembership() {
-        // TODO
-    }
-
     @Override
     public boolean join() {
         if (this.membershipCounter % 2 == 0) {
@@ -123,7 +118,6 @@ public class Store implements IMembership{
 
             // Notice cluster members of my join
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            // String msg = "Joining " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
             System.out.println("Join message sent!");
 
@@ -150,7 +144,6 @@ public class Store implements IMembership{
 
             // Notice cluster members of my leave
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            // String msg = "Leaving " + this.nodeIP + ":" + this.storePort + " - " +new Date().toString();
             sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
 
             this.executorMcast.shutdown();
@@ -174,6 +167,11 @@ public class Store implements IMembership{
         return true;
     }
 
+
+    private void initializeMembership() {
+        // TODO
+    }
+
     public void addJoinLeaveEvent(String nodeIP, int port, int membershipCounter) {
         if (membershipCounter % 2 == 0)
             this.membershipTable.addMembershipInfo(new MembershipInfo(nodeIP, port));
@@ -183,22 +181,19 @@ public class Store implements IMembership{
         this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
     }
 
+
     public int getPort() {
         return this.storePort;
     }
-
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
     }
-
     public int getMembershipCounter() {
         return this.membershipCounter;
     }
-
     public MembershipLog getMembershipLog() {
         return membershipLog;
     }
-
     public MembershipTable getMembershipTable() {
         return membershipTable;
     }
