@@ -5,6 +5,7 @@ import messages.MembershipTable;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
+import static utils.FileUtils.*;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -79,6 +80,7 @@ public class Store implements IMembership, IService {
         }
         return new Store(mcastAddr, mcastPort, nodeIP, storePort);
     }
+
     private static String usage() {
         return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
     }
@@ -187,27 +189,47 @@ public class Store implements IMembership, IService {
     @Override
     public String put(String key, String value) {
 
-        String keyHashed = (key == null) ? getHashed(value) : key;
+        String keyHashed = (key == null) ? this.getHashed(value) : key;
 
-        // Save in the closest node
+        // File is saved in the closest node of the key
         String closestNode = closestNode(keyHashed);
         if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
-            this.saveFile(keyHashed, value);
+            FileUtils.saveFile(this.storage, keyHashed, value);
+            return key;
         } else {
-            //     otherwise, send a put request to the node that was found with the ke
+            // otherwise, send a put request to the node that was found closest to the key
         }
 
-        return key;
-
+        return null;
     }
 
     @Override
     public String get(String key) {
+        // Argument is the key returned by put
+
+        // File (that was requested the content from) is stored in the closest node of the key
+        String closestNode = closestNode(key);
+        if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
+            return FileUtils.getFile(this.storage, key);
+        } else {
+            // otherwise, send a get request to the node that was found closest to the key
+        }
+
         return null;
     }
 
     @Override
     public boolean delete(String key) {
+        // Argument is the key returned by put
+
+        // File (that was requested to be deleted) is stored in the closest node of the key
+        String closestNode = closestNode(key);
+        if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
+            return FileUtils.deleteFile(this.storage, key);
+        } else {
+            // otherwise, send a delete request to the node that was found closest to the key
+        }
+
         return false;
     }
 
@@ -220,35 +242,6 @@ public class Store implements IMembership, IService {
     private String closestNode(String key){
         //TODO
         return this.storage;
-    }
-
-    private void saveFile(String key, String value) {
-        try {
-            File keyFile = new File("network/" + this.storage + "/" + key);
-
-            if (!keyFile.exists()) {
-                if (!keyFile.createNewFile()) {
-                    System.out.println("An error occurred when creating keyFile in node " + this.storage);
-                    return;
-                }
-            }
-
-            if (!keyFile.canWrite()) {
-                System.out.println("Permission denied! Can not write value of key "
-                        + key + " in node " + this.storage);
-                return;
-            }
-
-            FileWriter keyFileWriter = new FileWriter("network/" + this.storage + "/" + key, false);
-
-            keyFileWriter.write(value);
-            keyFileWriter.close();
-
-            System.out.println("Successfully saved key-value pair in node " + this.storage);
-        } catch (IOException e) {
-            System.out.println("An error occurred when saving key-value pair in node " + this.storage);
-            e.printStackTrace();
-        }
     }
 
     private void initializeMembership() {
