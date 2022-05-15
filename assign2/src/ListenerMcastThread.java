@@ -1,7 +1,11 @@
 
 import messages.MessageBuilder;
+import messages.TcpMessager;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,11 +30,15 @@ public class ListenerMcastThread implements Runnable {
                 switch (header.get("Type")) {
                     case "JOIN" -> {
                         System.out.println("Received join message from " + header.get("NodeIP"));
+                        String nodeIP = header.get("NodeIP");
+                        int nodePort = Integer.parseInt(header.get("Port"));
                         this.store.addJoinLeaveEvent(
-                                header.get("NodeIP"),
-                                Integer.parseInt(header.get("Port")),
+                                nodeIP,
+                                nodePort,
                                 Integer.parseInt(header.get("MembershipCounter"))
                         );
+                        String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipLog(), this.store.getMembershipTable(), this.store.getNodeIP());
+                        TcpMessager.sendMessage(nodeIP, nodePort, msMsg); // TODO Should not resend if no changes since last time
                     }
                     case "LEAVE" -> {
                         System.out.println("Received leave message from " + header.get("NodeIP"));

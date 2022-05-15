@@ -1,6 +1,8 @@
-package messages;
+package membership;
 
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MembershipInfo {
 
@@ -10,6 +12,19 @@ public class MembershipInfo {
     public MembershipInfo(String ip, int port) {
         this.ip = ip;
         this.port = port;
+    }
+    public MembershipInfo(String ipAndPort) {
+        ipAndPort = ipAndPort.trim();
+        Pattern p = Pattern.compile("^\\d^\\..");
+        Matcher m = p.matcher(ipAndPort);
+        if (m.find()) {
+            this.ip = ipAndPort.substring(0, m.start());
+            this.port = Integer.parseInt(ipAndPort.substring(m.start()+1));
+        }
+        else {
+            this.ip = "0.0.0.0";
+            this.port = 0;
+        }
     }
 
     public static String getIPFromString(String rec){
@@ -22,7 +37,7 @@ public class MembershipInfo {
 
     @Override
     public String toString(){
-        return ip + ": " + port;
+        return ip + ":" + port;
     }
 
     @Override
