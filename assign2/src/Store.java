@@ -5,15 +5,12 @@ import messages.MembershipTable;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
-import static utils.FileUtils.*;
+
+import utils.FileUtils;
+import utils.HashUtils;
 
 import java.io.*;
-import java.math.BigInteger;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +21,7 @@ public class Store implements IMembership, IService {
     private final int mcastPort;
     private final String nodeIP;
     private final int storePort;
-    private final String storage;
+    private final String hashedId;
 
     private int membershipCounter;
     private MembershipLog membershipLog;
@@ -36,8 +33,6 @@ public class Store implements IMembership, IService {
     private DatagramSocket sndDatagramSocket;
 
     private ExecutorService executorMcast;
-
-    MessageDigest encoder;
 
     // TODO everything
     public static void main(String[] args) {
@@ -99,13 +94,7 @@ public class Store implements IMembership, IService {
         this.sndDatagramSocket = null;
         String networkInterfaceStr = "loopback"; // TODO
 
-        try {
-            this.encoder = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            System.out.println("SHA-256 doesn't exist!");
-        }
-
-        this.storage = getHashed(this.nodeIP);
+        this.hashedId = HashUtils.getHashedSha256(this.nodeIP);
 
         try {
             this.sndDatagramSocket = new DatagramSocket();
@@ -189,12 +178,12 @@ public class Store implements IMembership, IService {
     @Override
     public String put(String key, String value) {
 
-        String keyHashed = (key == null) ? this.getHashed(value) : key;
+        String keyHashed = (key == null) ? HashUtils.getHashedSha256(value) : key;
 
         // File is saved in the closest node of the key
-        String closestNode = closestNode(keyHashed);
+        String closestNode = this.membershipTable.getClosestMembershipInfo(keyHashed);
         if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
-            FileUtils.saveFile(this.storage, keyHashed, value);
+            FileUtils.saveFile(this.hashedId, keyHashed, value);
             return key;
         } else {
             // otherwise, send a put request to the node that was found closest to the key
@@ -208,9 +197,9 @@ public class Store implements IMembership, IService {
         // Argument is the key returned by put
 
         // File (that was requested the content from) is stored in the closest node of the key
-        String closestNode = closestNode(key);
+        String closestNode = this.membershipTable.getClosestMembershipInfo(key);
         if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
-            return FileUtils.getFile(this.storage, key);
+            return FileUtils.getFile(this.hashedId, key);
         } else {
             // otherwise, send a get request to the node that was found closest to the key
         }
@@ -223,25 +212,14 @@ public class Store implements IMembership, IService {
         // Argument is the key returned by put
 
         // File (that was requested to be deleted) is stored in the closest node of the key
-        String closestNode = closestNode(key);
+        String closestNode = this.membershipTable.getClosestMembershipInfo(key);
         if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
-            return FileUtils.deleteFile(this.storage, key);
+            return FileUtils.deleteFile(this.hashedId, key);
         } else {
             // otherwise, send a delete request to the node that was found closest to the key
         }
 
         return false;
-    }
-
-
-    private String getHashed(String value) {
-        return String.format("%064x", new BigInteger(1,
-                this.encoder.digest(value.getBytes(StandardCharsets.UTF_8))));
-    }
-
-    private String closestNode(String key){
-        //TODO
-        return this.storage;
     }
 
     private void initializeMembership() {
@@ -252,7 +230,8 @@ public class Store implements IMembership, IService {
         if (membershipCounter % 2 == 0)
             this.membershipTable.addMembershipInfo(new MembershipInfo(nodeIP, port));
         else
-            this.membershipTable.removeMembershipInfo(new MembershipInfo(nodeIP, port));
+            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(nodeIP));
+            // this.membershipTable.removeMembershipInfo(new MembershipInfo(nodeIP, port));
 
         this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
     }

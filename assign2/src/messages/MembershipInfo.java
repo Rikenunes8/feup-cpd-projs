@@ -14,6 +14,14 @@ public class MembershipInfo {
         this.port = port;
     }
 
+    public String getIP() {
+        return this.ip;
+    }
+
+    public int getPort() {
+        return this.port;
+    }
+
     public static String getIPFromString(String rec){
         return rec.substring(rec.length() - 7);
     }
