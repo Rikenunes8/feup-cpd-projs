@@ -4,9 +4,7 @@ import utils.HashUtils;
 
 import static utils.HashUtils.*;
 
-import java.util.TreeMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class MembershipTable {
 
@@ -38,7 +36,14 @@ public class MembershipTable {
         // if not equal, find the interval that it should be and return the successor
         // extreme case - when it would be after the last one send the first one
 
-        return null;
+        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key);
+        // the key is after the last hashedId in the tree
+        if (closestNode == null) {
+            // : reassign the closest value as the first one in the tree
+            closestNode = this.membershipInfoMap.firstEntry();
+        }
+
+        return closestNode.getValue().toString();
     }
 
     @Override
