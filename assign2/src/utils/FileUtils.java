@@ -1,6 +1,9 @@
 package utils;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Scanner;
 
 public class FileUtils {
 
@@ -64,26 +67,19 @@ public class FileUtils {
     }
 
     public static boolean deleteFile(String storage, String key) {
-        try {
-            File keyFile = new File("network/" + storage + "/" + key);
+        File keyFile = new File("network/" + storage + "/" + key);
 
-            if (!keyFile.exists()) {
-                System.out.println("In node " + storage + " there doesn't exist any value associated with the key: " + key);
-                return false;
-            }
-
-            if (keyFile.delete()) {
-                System.out.println("Successfully deleted key-value pair in node " + storage);
-                return true;
-            }
-
-            System.out.println("An error occurred when deleting key-value pair in node " + storage);
-            return false;
-            
-        } catch (IOException e) {
-            System.out.println("An error occurred when deleting key-value pair of key " + key + " in node " + storage);
-            e.printStackTrace();
+        if (!keyFile.exists()) {
+            System.out.println("In node " + storage + " there doesn't exist any value associated with the key: " + key);
             return false;
         }
+
+        if (keyFile.delete()) {
+            System.out.println("Successfully deleted key-value pair in node " + storage);
+            return true;
+        }
+
+        System.out.println("An error occurred when deleting key-value pair in node " + storage);
+        return false;
     }
 }
