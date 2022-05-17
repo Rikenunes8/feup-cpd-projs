@@ -1,7 +1,7 @@
-import messages.MembershipInfo;
-import messages.MembershipLog;
-import messages.MembershipLogRecord;
-import messages.MembershipTable;
+import membership.MembershipInfo;
+import membership.MembershipLog;
+import membership.MembershipLogRecord;
+import membership.MembershipTable;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
@@ -29,6 +29,7 @@ public class Store implements IMembership{
     private DatagramSocket sndDatagramSocket;
 
     private ExecutorService executorMcast;
+    private ExecutorService executorMembershipReceiver;
 
     // TODO everything
     public static void main(String[] args) {
@@ -38,10 +39,9 @@ public class Store implements IMembership{
         ExecutorService executor = Executors.newFixedThreadPool(8);
 
         while (true) {
-            System.out.println("New thread");
-
-            try (ServerSocket serverSocket = new ServerSocket(store.getPort())){
+            try (ServerSocket serverSocket = new ServerSocket(store.getStorePort())){
                 Socket socket = serverSocket.accept();
+                System.out.println("Main connection accepted");
 
                 Runnable work = new DispatcherThread(socket, store);
                 executor.execute(work);
@@ -79,15 +79,11 @@ public class Store implements IMembership{
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
-
         this.membershipCounter = -1;
         this.membershipLog = new MembershipLog(); // TODO
         this.membershipTable = new MembershipTable(); // TODO
 
-        this.rcvDatagramSocket = null;
-        this.sndDatagramSocket = null;
         String networkInterfaceStr = "loopback"; // TODO
-
         try {
             this.sndDatagramSocket = new DatagramSocket();
             this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
@@ -110,20 +106,16 @@ public class Store implements IMembership{
             return false;
         }
         try {
+            ServerSocket serverSocket = new ServerSocket(0);
             this.membershipCounter++;
-            this.rcvDatagramSocket = new DatagramSocket(null);
-            this.rcvDatagramSocket.setReuseAddress(true);
-            this.rcvDatagramSocket.bind(new InetSocketAddress(this.mcastPort));
-            this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
 
-            // Notice cluster members of my join
-            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
-            sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
-            System.out.println("Join message sent!");
 
-            this.executorMcast = Executors.newWorkStealingPool(1);
-            Runnable work = new ListenerMcastThread(this);
-            this.executorMcast.execute(work);
+            this.executorMcast = Executors.newWorkStealingPool(2);
+
+            this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+            initMcastReceiver();
+            this.executorMcast.execute(new ListenerMcastThread(this));
+
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -143,21 +135,10 @@ public class Store implements IMembership{
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter);
+            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter, 0);
             sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
 
-            this.executorMcast.shutdown();
-            System.out.println("Shutting down...");
-            executorMcast.awaitTermination(1, TimeUnit.SECONDS);
-            System.out.println("Wait enough");
-            if (!executorMcast.isTerminated()) {
-                System.out.println("Forcing shut down");
-                executorMcast.shutdownNow();
-                System.out.println("Shut down complete");
-            }
-
-            this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
-            this.rcvDatagramSocket = null;
+            endMcastReceiver();
 
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
@@ -165,6 +146,28 @@ public class Store implements IMembership{
             throw new RuntimeException(e);
         }
         return true;
+    }
+
+    private void initMcastReceiver() throws IOException {
+        this.rcvDatagramSocket = new DatagramSocket(null);
+        this.rcvDatagramSocket.setReuseAddress(true);
+        this.rcvDatagramSocket.bind(new InetSocketAddress(this.mcastPort));
+        this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
+    }
+
+    private void endMcastReceiver() throws InterruptedException, IOException {
+        this.executorMcast.shutdown();
+        System.out.println("Shutting down...");
+        executorMcast.awaitTermination(1, TimeUnit.SECONDS);
+        System.out.println("Wait enough");
+        if (!executorMcast.isTerminated()) {
+            System.out.println("Forcing shut down");
+            executorMcast.shutdownNow();
+            System.out.println("Shut down complete");
+        }
+
+        this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
+        this.rcvDatagramSocket = null;
     }
 
 
@@ -181,12 +184,23 @@ public class Store implements IMembership{
         this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
     }
 
-
-    public int getPort() {
+    public String getNodeIP() {
+        return nodeIP;
+    }
+    public int getStorePort() {
         return this.storePort;
+    }
+    public InetAddress getMcastAddr() {
+        return mcastAddr;
+    }
+    public int getMcastPort() {
+        return mcastPort;
     }
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
+    }
+    public DatagramSocket getSndDatagramSocket() {
+        return sndDatagramSocket;
     }
     public int getMembershipCounter() {
         return this.membershipCounter;
@@ -196,6 +210,13 @@ public class Store implements IMembership{
     }
     public MembershipTable getMembershipTable() {
         return membershipTable;
+    }
+
+    public void setMembershipLog(MembershipLog membershipLog) {
+        this.membershipLog = membershipLog;
+    }
+    public void setMembershipTable(MembershipTable membershipTable) {
+        this.membershipTable = membershipTable;
     }
 }
 
