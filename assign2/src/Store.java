@@ -18,7 +18,6 @@ public class Store implements IMembership{
     private final int mcastPort;
     private final String nodeIP;
     private final int storePort;
-    private int membershipPort;
 
     private int membershipCounter;
     private MembershipLog membershipLog;
@@ -40,10 +39,9 @@ public class Store implements IMembership{
         ExecutorService executor = Executors.newFixedThreadPool(8);
 
         while (true) {
-            System.out.println("New thread");
-
             try (ServerSocket serverSocket = new ServerSocket(store.getStorePort())){
                 Socket socket = serverSocket.accept();
+                System.out.println("Main connection accepted");
 
                 Runnable work = new DispatcherThread(socket, store);
                 executor.execute(work);
@@ -107,17 +105,16 @@ public class Store implements IMembership{
             System.out.println("This node already belongs to a multicast group");
             return false;
         }
-        try (ServerSocket serverSocket = new ServerSocket(0)){
+        try {
+            ServerSocket serverSocket = new ServerSocket(0);
             this.membershipCounter++;
 
-            initMcastReceiver();
 
-            this.executorMcast = Executors.newWorkStealingPool(1);
+            this.executorMcast = Executors.newWorkStealingPool(2);
 
-            this.membershipPort = serverSocket.getLocalPort();
-
-            this.executorMcast.execute(new ListenerMcastThread(this));
             this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+            initMcastReceiver();
+            this.executorMcast.execute(new ListenerMcastThread(this));
 
 
         } catch (Exception e) {
@@ -198,9 +195,6 @@ public class Store implements IMembership{
     }
     public int getMcastPort() {
         return mcastPort;
-    }
-    public int getMembershipPort() {
-        return membershipPort;
     }
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;

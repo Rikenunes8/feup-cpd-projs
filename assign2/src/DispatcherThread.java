@@ -24,10 +24,12 @@ public class DispatcherThread implements Runnable{
                 case "join" -> store.join();
                 case "leave" -> store.leave();
                 case "show" -> { // TODO DEBUG
+                    System.out.println("\n--- MEMBERSHIP VIEW ---");
                     System.out.println("Membership Table");
                     System.out.println(store.getMembershipTable());
                     System.out.println("Membership Logs");
                     System.out.println(store.getMembershipLog());
+                    System.out.println("--- END MEMBERSHIP VIEW ---\n");
                 }
                 default -> System.out.println("Operation not implemented");
             }

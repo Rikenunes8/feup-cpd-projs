@@ -32,13 +32,20 @@ public class ListenerMcastThread implements Runnable {
                         System.out.println("Received join message from " + header.get("NodeIP"));
                         String nodeIP = header.get("NodeIP");
                         int nodePort = Integer.parseInt(header.get("Port"));
+                        int msPort = Integer.parseInt(header.get("MembershipPort"));
                         this.store.addJoinLeaveEvent(
                                 nodeIP,
                                 nodePort,
                                 Integer.parseInt(header.get("MembershipCounter"))
                         );
-                        String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipLog(), this.store.getMembershipTable(), this.store.getNodeIP());
-                        TcpMessager.sendMessage(nodeIP, nodePort, msMsg); // TODO Should not resend if no changes since last time
+                        if (!this.store.getNodeIP().equals(nodeIP)) {
+                            String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipLog(), this.store.getMembershipTable(), this.store.getNodeIP());
+                            try {
+                                TcpMessager.sendMessage(nodeIP, msPort, msMsg); // TODO Should not resend if no changes since last time
+                            } catch (IOException e) {
+                                System.out.println("ERROR: " + e.getMessage());
+                            }
+                        }
                     }
                     case "LEAVE" -> {
                         System.out.println("Received leave message from " + header.get("NodeIP"));
@@ -50,10 +57,10 @@ public class ListenerMcastThread implements Runnable {
                     }
                     default -> System.out.println("Type case not implemented");
                 }
-
+                System.out.println("---- MS VIEW AFTER LISTENING MCAST----");
                 System.out.println("MS Log:\n" + store.getMembershipLog());
                 System.out.println("MS Tab:\n" + store.getMembershipTable());
-
+                System.out.println("---- END MS VIEW ----");
                 // System.out.println(msg); // DEBUG
             } catch (IOException e) {
                 throw new RuntimeException(e);

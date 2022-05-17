@@ -11,12 +11,14 @@ public class MembershipLog {
     }
 
     public void addMembershipInfo(MembershipLogRecord mLogR){
-        logs.add(mLogR);
+        if (!this.logs.contains(mLogR)) {
+            this.logs.add(mLogR);
+        }
     }
 
     public void removeMembershipInfo(MembershipLogRecord mLogR){
         // TODO This could cause some problems, maybe need to remove at index
-        logs.remove(mLogR);
+        this.logs.remove(mLogR);
     }
 
     @Override

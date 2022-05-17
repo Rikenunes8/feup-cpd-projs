@@ -9,7 +9,7 @@ public class MulticastMessager {
     public static String receiveMcastMessage(DatagramSocket datagramSocket) throws IOException {
         byte[] recvBuffer = new byte[8092];
         DatagramPacket recvPacket = new DatagramPacket(recvBuffer, recvBuffer.length);
-        System.out.println("\nWaiting for a new packet: ...");
+        System.out.println("\nListening on multicast ...");
         datagramSocket.receive(recvPacket);
         return new String(recvPacket.getData(), 0, recvPacket.getLength());
     }
@@ -17,7 +17,7 @@ public class MulticastMessager {
         if (msg == null) return;
         byte[] sndBuffer = msg.getBytes();
         DatagramPacket sndPacket = new DatagramPacket(sndBuffer, sndBuffer.length, mcastAddr, mcastPort);
-        System.out.println("Sending message to " + mcastAddr + ":" + mcastPort);
+        System.out.println("Sending mcast message to " + mcastAddr + ":" + mcastPort);
         datagramSocket.send(sndPacket);
     }
 }

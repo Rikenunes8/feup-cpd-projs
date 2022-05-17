@@ -25,13 +25,15 @@ public class MessageBuilder {
     }
 
     public MessageBuilder(String msg) {
+
+        System.out.println("\n--- MESSAGE ---");
         System.out.println(msg); // DEBUG
+        System.out.println("--- END MESSAGE ---\n");
         String[] msgArr = msg.split(Character.toString(CR) + LF + CR + LF);
 
         String header = msgArr[0];
         String[] headerLines = header.split(Character.toString(CR) + LF);
         this.header = new HashMap<>();
-        System.out.println(headerLines.length); // DEBUG
         for (String headerLine : headerLines) {
             String[] keyVal = headerLine.split(": ");
             this.header.put(keyVal[0], keyVal[1]);

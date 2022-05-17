@@ -4,13 +4,13 @@ import java.io.*;
 import java.net.Socket;
 
 public class TcpMessager {
-    public static void sendMessage(String ip, int port, String message) {
+    public static void sendMessage(String ip, int port, String message) throws IOException {
         try (Socket socket = new Socket(ip, port)) {
             OutputStream output = socket.getOutputStream();
             PrintWriter writer = new PrintWriter(output, true);
             writer.println(message);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw e;
         }
     }
     public static String receiveMessage(Socket socket) throws IOException {
