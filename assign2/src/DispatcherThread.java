@@ -1,3 +1,5 @@
+import messages.TcpMessager;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,10 +18,8 @@ public class DispatcherThread implements Runnable{
     @Override
     public void run() {
         try {
-            InputStream input = this.socket.getInputStream();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+            String msg = TcpMessager.receiveMessage(socket);
 
-            String msg = reader.readLine();
             switch (msg) {
                 case "join" -> store.join();
                 case "leave" -> store.leave();

@@ -54,7 +54,7 @@ public class MembershipCollectorThread implements Runnable {
                 Map.Entry<String, MembershipView> entry = future.get();
                 System.out.println("Get received"); // TODO
                 membershipViews.put(entry.getKey(), entry.getValue());
-            } catch (CancellationException e) {
+            } catch (ExecutionException | InterruptedException e) {
                 System.out.println("Get failed"); // TODO
                 attempts++;
 
@@ -64,9 +64,6 @@ public class MembershipCollectorThread implements Runnable {
                 } catch (IOException ignored) {
                     System.out.println(ignored);
                 }
-            } catch (ExecutionException | InterruptedException e) {
-                System.out.println("Fuck"); // TODO
-                System.out.println(e);
             }
         }
         System.out.println("MembershipViews size: " + this.membershipViews.size()); // TODO DEBUG
@@ -74,6 +71,7 @@ public class MembershipCollectorThread implements Runnable {
         MembershipView membershipView = this.mergeMembershipView();
         this.store.setMembershipTable(membershipView.getMembershipTable());
         this.store.setMembershipLog(membershipView.getMembershipLog());
+        System.out.println("Membership views synchronized"); // TODO DEBUG
     }
 
     private MembershipView mergeMembershipView() {
