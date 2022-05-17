@@ -22,58 +22,43 @@ public class MembershipCollectorThread implements Runnable {
     private final Store store;
 
     public MembershipCollectorThread(ServerSocket serverSocket, Store store) {
-        this.serverSocket = serverSocket;
         this.store = store;
-
+        this.serverSocket = serverSocket;
         this.membershipViews = new ConcurrentHashMap<>();
     }
 
     @Override
     public void run() {
-        int maxMembershipMessages = 2;
         int maxJoinResends = 2;
+        int maxMembershipMessages = 2;
         System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
         String msg = messageJoinLeave(this.store.getNodeIP(), this.store.getStorePort(), this.store.getMembershipCounter(), serverSocket.getLocalPort());
-        try {
-            sendMcastMessage(msg, this.store.getSndDatagramSocket(), this.store.getMcastAddr(), this.store.getMcastPort());
-        } catch (IOException e) {
-            try {
-                this.serverSocket.close();
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            }
-            throw new RuntimeException(e);
-        }
-        System.out.println("Join message sent!");
 
-
+        boolean send = true;
         int attempts = 0;
-        while (this.membershipViews.size() < maxMembershipMessages && attempts < maxJoinResends) {
+        do {
+            if (send) {
+                try { sendMcastMessage(msg, this.store.getSndDatagramSocket(), this.store.getMcastAddr(), this.store.getMcastPort());}
+                catch (IOException e) {
+                    try {this.serverSocket.close();}
+                    catch (IOException ex) {throw new RuntimeException(ex);}
+                    throw new RuntimeException(e);
+                }
+                System.out.println("Join message sent!");
+                send = false;
+            }
             System.out.println("+ WMembershipViews size: " + this.membershipViews.size()); // TODO DEBUG
 
             var entry = membershipReaderTask();
-            if (entry == null) {
-                System.out.println("Get failed"); // TODO
-                attempts++;
+            if (entry != null) membershipViews.put(entry.getKey(), entry.getValue());
+            else { attempts++; send = true; }
+        } while (this.membershipViews.size() < maxMembershipMessages && attempts < maxJoinResends);
 
-                try {
-                    sendMcastMessage(msg, this.store.getSndDatagramSocket(), this.store.getMcastAddr(), this.store.getMcastPort());
-                    System.out.println("Join message resent!");
-                    } catch (IOException e) {
-                        System.out.println(e.getMessage());
-                    }
-            }
-            else {
-                membershipViews.put(entry.getKey(), entry.getValue());
-            }
-        }
-        try {
-            this.serverSocket.close();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        try {this.serverSocket.close();}
+        catch (IOException e) {throw new RuntimeException(e);}
+
         System.out.println("+ MembershipViews size: " + this.membershipViews.size()); // TODO DEBUG
 
         MembershipView membershipView = this.mergeMembershipView();
@@ -101,13 +86,11 @@ public class MembershipCollectorThread implements Runnable {
 
             socket.close();
             return new AbstractMap.SimpleEntry<>(id, membershipView);
-        } catch (SocketTimeoutException e) {
-            System.out.println("Timeout?!");
-        } catch (SocketException e) {
-            System.out.println(e.getMessage());
-        } catch (IOException e) {
-            throw new RuntimeException();
         }
+        catch (SocketTimeoutException e) { System.out.println("Timeout?!"); }
+        catch (SocketException e) { System.out.println(e.getMessage()); }
+        catch (IOException e) { throw new RuntimeException(); }
+
         return null;
     }
 
@@ -117,9 +100,7 @@ public class MembershipCollectorThread implements Runnable {
             merged = mergeTwoMembershipViews(merged, pair.getValue());
         }
 
-        merged = mergeTwoMembershipViews(merged, new MembershipView(this.store.getMembershipTable(), this.store.getMembershipLog()));
-
-        return merged;
+        return mergeTwoMembershipViews(merged, new MembershipView(this.store.getMembershipTable(), this.store.getMembershipLog()));
     }
 
     // TODO actual merge something
