@@ -1,6 +1,7 @@
 package messages;
 
 import membership.*;
+import utils.HashUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -135,7 +136,7 @@ public class MessageBuilder {
         while (scanner.hasNextLine()) {
             String line = scanner.nextLine();
             if (line.startsWith("--sep--")) incr = false;
-            else if (incr) membershipTable.addMembershipInfo(new MembershipInfo(line));
+            else if (incr) membershipTable.addMembershipInfo(HashUtils.getHashedSha256(line.trim()), new MembershipInfo(line));
             else membershipLog.addMembershipInfo(new MembershipLogRecord(line));
         }
         System.out.println("PARSED");
