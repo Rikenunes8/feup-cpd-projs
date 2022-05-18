@@ -1,8 +1,10 @@
 package messages;
 
+import membership.*;
+
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 
 public class MessageBuilder {
     static final char CR = 0xD;
@@ -23,22 +25,20 @@ public class MessageBuilder {
     }
 
     public MessageBuilder(String msg) {
+
+        System.out.println("\n--- MESSAGE ---");
         System.out.println(msg); // DEBUG
+        System.out.println("--- END MESSAGE ---\n");
         String[] msgArr = msg.split(Character.toString(CR) + LF + CR + LF);
 
         String header = msgArr[0];
         String[] headerLines = header.split(Character.toString(CR) + LF);
         this.header = new HashMap<>();
-        System.out.println(headerLines.length); // DEBUG
         for (String headerLine : headerLines) {
             String[] keyVal = headerLine.split(": ");
             this.header.put(keyVal[0], keyVal[1]);
         }
         this.body = msgArr.length < 2 ?  "" : msgArr[1];
-    }
-
-    public MessageBuilder(Map<String, String> header, String body) {
-        // TODO if needed
     }
 
     /**
@@ -49,7 +49,7 @@ public class MessageBuilder {
      *                          it's a <b>join</b> message, <b>odd</b> values mean it's a <b>leave</b> message
      * @return String containing only a header correctly formatted
      */
-    public static String messageJoinLeave(String nodeIP, int port, int membershipCounter) {
+    public static String messageJoinLeave(String nodeIP, int port, int membershipCounter, int msPort) {
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
@@ -57,6 +57,7 @@ public class MessageBuilder {
         headerLines.put("NodeIP", nodeIP);
         headerLines.put("Port", String.valueOf(port));
         headerLines.put("MembershipCounter", String.valueOf(membershipCounter));
+        headerLines.put("MembershipPort", String.valueOf(msPort));
 
         // NO BODY IN JOIN/LEAVE MESSAGES!!
 
@@ -101,23 +102,55 @@ public class MessageBuilder {
      * @param membershipLog MembershipLog with a max size of 32, containing the most recent membership log info
      * @param membershipTable MembershipTable, contains information about all the nodes in current use according
      *                        to a specific node
-     * @param sendNodeIP String with the IP of the sender Node, used for the header only
+     * @param nodeIP String with the IP of the sender Node, used for the header only
      * @return String with a header and a body correctly formatted
      */
-    public static String membershipMessage(MembershipLog membershipLog, MembershipTable membershipTable,
-                                           String sendNodeIP){
+    public static String membershipMessage(MembershipLog membershipLog, MembershipTable membershipTable, String nodeIP){
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
-        headerLines.put("NodeIP", sendNodeIP);
+        headerLines.put("Type", "MEMBERSHIP" );
+        headerLines.put("NodeIP", nodeIP);
 
-        StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
+
+        StringBuilder message = new StringBuilder();
+        message.append(buildHeader(headerLines));
 
         // BODY
-        message.append(membershipLog.toString());
-        message.append(membershipTable.toString());
+        var msTable = membershipTable.toString();
+        var msLog = new MembershipLog(membershipLog.last32Logs()).toString();
+        message.append(msTable);
+        message.append("--sep--\n");
+        message.append(msLog);
 
         return message.toString();
+    }
+
+    public static MembershipView parseMembershipMessage(MessageBuilder message) {
+        MembershipTable membershipTable = new MembershipTable(); // TODO
+        MembershipLog membershipLog = new MembershipLog(); // TODO
+        String body = message.getBody();
+        boolean incr = true;
+        Scanner scanner = new Scanner(body);
+        while (scanner.hasNextLine()) {
+            String line = scanner.nextLine();
+            if (line.startsWith("--sep--")) incr = false;
+            else if (incr) membershipTable.addMembershipInfo(new MembershipInfo(line));
+            else membershipLog.addMembershipInfo(new MembershipLogRecord(line));
+        }
+        System.out.println("PARSED");
+        System.out.println(membershipTable);
+        System.out.println(membershipLog);
+        return new MembershipView(membershipTable, membershipLog);
+    }
+
+    public static String clientMessage(String op, String arg) {
+        // Setting up the header
+        Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("NodeIP", "CLIENT");
+        headerLines.put("Type", op);
+
+        return buildHeader(headerLines) + arg;
     }
 
     /**
