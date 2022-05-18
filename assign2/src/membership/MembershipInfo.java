@@ -5,9 +5,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class MembershipInfo {
+    //TODO: GUARDAR DATA DA INFORMAÇÂO
+    //TODO: GUARDAR ESTADO DO NÓ (ADORMECIDO OU NÂO)
 
-    private String ip;
-    private int port;
+    private final String ip;
+    private final int port;
 
     public MembershipInfo(String ip, int port) {
         this.ip = ip;
@@ -27,12 +29,20 @@ public class MembershipInfo {
         }
     }
 
+    public String getIP() {
+        return this.ip;
+    }
+
+    public int getPort() {
+        return this.port;
+    }
+
     public static String getIPFromString(String rec){
-        return rec.substring(rec.length() - 7);
+        return rec.split(":")[0];
     }
 
     public static String getPortFromString(String rec){
-        return rec.substring(rec.length() - 5, rec.length()-1);
+        return rec.split(":")[1];
     }
 
     @Override

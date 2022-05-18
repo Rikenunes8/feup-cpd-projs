@@ -7,7 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Scanner;
 
-public class _Node implements IStore {
+public class _Node implements IService {
 
     private final String id;
     MessageDigest encoder;

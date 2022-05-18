@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.Scanner;
 import java.util.regex.Pattern;
 
 public class TestClient {
@@ -43,6 +44,7 @@ public class TestClient {
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
+                sendMessage(nodeIP, nodePort, "join");
             }
             case "leave" ->{
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
@@ -53,31 +55,35 @@ public class TestClient {
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
+                sendMessage(nodeIP, nodePort, "leave");
             }
             case "put" -> {
                 if (args.length != 4) {
                     System.out.println("Excepted 2 Operation Argument since is a PUT key-value operation. \n" + correctInput);
                     return;
                 }
-                String key = args[2];
-                String value = args[3];
-                System.out.println("perform join operation nodeAC= " + nodeAC + " , key= " + key + " , value= " + value);
+                String filename = args[2];
+                System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
+                String value = readFile(filename);
+                sendMessage(nodeIP, nodePort, "put " + value);
             }
             case "get" -> {
                 if (args.length != 3) {
                     System.out.println("Excepted 1 Operation Argument since is a GET key-value operation. \n" + correctInput);
                     return;
                 }
-                String encoded = args[2];
-                System.out.println("perform get operation nodeAC= " + nodeAC + " , encoded= " + encoded);
+                String key = args[2];
+                System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
+                sendMessage(nodeIP, nodePort, "get " + key);
             }
             case "delete" -> {
                 if (args.length != 3) {
                     System.out.println("Excepted 1 Operation Argument since is a DELETE key-value operation. \n" + correctInput);
                     return;
                 }
-                String encoded = args[2];
-                System.out.println("perform delete operation nodeAC= " + nodeAC + " , encoded= " + encoded);
+                String key = args[2];
+                System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
+                sendMessage(nodeIP, nodePort, "delete " + key);
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }
@@ -98,6 +104,39 @@ public class TestClient {
         } else {
             System.out.println("Not a valid implementation parameter");
             return false;
+        }
+    }
+
+    private static void sendMessage(String nodeIP, int nodePort, String msg) {
+        try (Socket socket = new Socket(nodeIP, nodePort)) {
+            OutputStream output = socket.getOutputStream();
+            PrintWriter writer = new PrintWriter(output, true);
+            writer.println(msg);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String readFile(String pathname) {
+        File keyFile = new File(pathname);
+        if (!keyFile.exists()) {
+            System.out.println("File name " + pathname + " does not exists");
+            return null;
+        }
+        if (!keyFile.canRead()){
+            System.out.println("Permission denied! Can not read file named " + pathname);
+            return null;
+        }
+        try {
+            Scanner sc = new Scanner(keyFile);
+            StringBuilder value = new StringBuilder();
+            while (sc.hasNextLine()) {
+                value.append(sc.nextLine());
+            }
+            return value.toString();
+        } catch (FileNotFoundException e) {
+            System.out.println("Error reading file " + pathname);
+            return null;
         }
     }
 }

@@ -94,15 +94,7 @@ public class MessageBuilder {
      * @return String with a header and body correctly formatted
      */
     public static String messageStore(String operation, String key) {
-
-        // Setting up the header
-        Map<String, String> headerLines = new HashMap<>();
-        headerLines.put("Operation", operation);
-        headerLines.put("Key", key);
-
-        // NO BODY
-
-        return buildHeader(headerLines);
+        return messageStore(operation, key, null);
     }
 
     /**

@@ -6,6 +6,9 @@ import membership.MembershipTable;
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
 
+import utils.FileUtils;
+import utils.HashUtils;
+
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.ExecutorService;
@@ -13,11 +16,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 
-public class Store implements IMembership{
+public class Store implements IMembership, IService {
     private final InetAddress mcastAddr;
     private final int mcastPort;
     private final String nodeIP;
     private final int storePort;
+    private final String hashedId;
 
     private int membershipCounter;
     private MembershipLog membershipLog;
@@ -34,8 +38,10 @@ public class Store implements IMembership{
     public static void main(String[] args) {
         Store store = parseArgs(args);
 
-        //ExecutorService executor = Executors.newWorkStealingPool(8);
-        ExecutorService executor = Executors.newFixedThreadPool(8);
+        Runtime runtime = Runtime.getRuntime();
+        // ExecutorService executor = Executors.newWorkStealingPool(8);
+        ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
+        // according to the number of processors available to the Java virtual machine
 
         while (true) {
             try (ServerSocket serverSocket = new ServerSocket(store.getStorePort())){
@@ -68,6 +74,7 @@ public class Store implements IMembership{
         }
         return new Store(mcastAddr, mcastPort, nodeIP, storePort);
     }
+
     private static String usage() {
         return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
     }
@@ -83,6 +90,9 @@ public class Store implements IMembership{
         this.membershipTable = new MembershipTable(); // TODO
 
         String networkInterfaceStr = "loopback"; // TODO
+
+        this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
+
         try {
             this.sndDatagramSocket = new DatagramSocket();
             this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
@@ -112,6 +122,9 @@ public class Store implements IMembership{
             this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
+
+            // TODO make node directory here
+            FileUtils.newDirectory(this.hashedId);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -165,6 +178,61 @@ public class Store implements IMembership{
         this.rcvDatagramSocket = null;
     }
 
+    @Override
+    public String put(String key, String value) {
+
+        String keyHashed = (key == null) ? HashUtils.getHashedSha256(value) : key;
+
+        // File is saved in the closest node of the key
+        String closestNode = this.membershipTable.getClosestMembershipInfo(keyHashed);
+        if (closestNode.equals(this.getNodeIPPort())) {
+            FileUtils.saveFile(this.hashedId, keyHashed, value);
+            // TODO send to testClient the keyHashed who is responsible to display the key received of the file
+            return keyHashed;
+        } else {
+            // TODO
+            // otherwise, send a put request to the node that was found closest to the key
+            String message = MessageBuilder.messageStore("PUT", keyHashed, value);
+            // TcpMessager to the closestNode
+        }
+
+        return null;
+    }
+
+    @Override
+    public String get(String key) {
+        // Argument is the key returned by put
+
+        // File (that was requested the content from) is stored in the closest node of the key
+        String closestNode = this.membershipTable.getClosestMembershipInfo(key);
+        if (closestNode.equals(this.getNodeIPPort())) {
+            return FileUtils.getFile(this.hashedId, key);
+        } else {
+            // TODO
+            // otherwise, send a get request to the node that was found closest to the key
+            String message = MessageBuilder.messageStore("GET", key);
+        }
+
+        return null;
+    }
+
+    @Override
+    public boolean delete(String key) {
+        // Argument is the key returned by put
+
+        // File (that was requested to be deleted) is stored in the closest node of the key
+        String closestNode = this.membershipTable.getClosestMembershipInfo(key);
+        if (closestNode.equals(this.getNodeIPPort())) {
+            return FileUtils.deleteFile(this.hashedId, key);
+        } else {
+            // TODO
+            // otherwise, send a delete request to the node that was found closest to the key
+            String message = MessageBuilder.messageStore("DELETE", key);
+        }
+
+        return false;
+    }
+
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         // TODO merge table
         this.membershipLog.mergeLogs(membershipLog.last32Logs());
@@ -172,9 +240,9 @@ public class Store implements IMembership{
 
     public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
         if (membershipCounter % 2 == 0)
-            this.membershipTable.addMembershipInfo(new MembershipInfo(nodeIP, port));
+            this.membershipTable.addMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()), new MembershipInfo(nodeIP, port));
         else
-            this.membershipTable.removeMembershipInfo(new MembershipInfo(nodeIP, port));
+            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()));
 
         this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
     }
@@ -184,6 +252,9 @@ public class Store implements IMembership{
     }
     public int getStorePort() {
         return this.storePort;
+    }
+    private String getNodeIPPort() {
+        return this.nodeIP + ":" + this.storePort;
     }
     public InetAddress getMcastAddr() {
         return mcastAddr;
@@ -206,7 +277,7 @@ public class Store implements IMembership{
     public MembershipTable getMembershipTable() {
         return membershipTable;
     }
-
+    
     public void setMembershipLog(MembershipLog membershipLog) {
         this.membershipLog = membershipLog;
     }
