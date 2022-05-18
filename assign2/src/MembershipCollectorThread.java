@@ -17,6 +17,10 @@ import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class MembershipCollectorThread implements Runnable {
+    private static final int TIMEOUT = 1000;
+    private static final int MAX_JOINS = 2;
+    private static final int MAX_MS_MSG = 2;
+
     private final ConcurrentHashMap<String, MembershipView> membershipViews;
     private final ServerSocket serverSocket;
     private final Store store;
@@ -29,8 +33,6 @@ public class MembershipCollectorThread implements Runnable {
 
     @Override
     public void run() {
-        int maxJoinResends = 2;
-        int maxMembershipMessages = 2;
         System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
@@ -52,16 +54,16 @@ public class MembershipCollectorThread implements Runnable {
             System.out.println("+ WMembershipViews size: " + this.membershipViews.size()); // TODO DEBUG
 
             var entry = membershipReaderTask();
-            if (entry != null) membershipViews.put(entry.getKey(), entry.getValue());
+            if (entry != null) this.membershipViews.put(entry.getKey(), entry.getValue());
             else { attempts++; send = true; }
-        } while (this.membershipViews.size() < maxMembershipMessages && attempts < maxJoinResends);
+        } while (this.membershipViews.size() < MAX_MS_MSG && attempts < MAX_JOINS);
 
         try {this.serverSocket.close();}
         catch (IOException e) {throw new RuntimeException(e);}
 
         System.out.println("+ MembershipViews size: " + this.membershipViews.size()); // TODO DEBUG
 
-        MembershipView membershipView = this.mergeMembershipView();
+        MembershipView membershipView = this.mergeMembershipViews();
         this.store.setMembershipTable(membershipView.getMembershipTable());
         this.store.setMembershipLog(membershipView.getMembershipLog());
         System.out.println("Membership views synchronized"); // TODO DEBUG
@@ -70,8 +72,8 @@ public class MembershipCollectorThread implements Runnable {
     public Map.Entry<String, MembershipView> membershipReaderTask() {
         try {
             System.out.println("Waiting for accepting membershipMessages [MRT]");
-            serverSocket.setSoTimeout(1000);
-            Socket socket = serverSocket.accept();
+            this.serverSocket.setSoTimeout(TIMEOUT);
+            Socket socket = this.serverSocket.accept();
             System.out.println("MembershipMessage accepted [MRT]");
 
             System.out.println("New membership connection");
@@ -94,19 +96,18 @@ public class MembershipCollectorThread implements Runnable {
         return null;
     }
 
-    private MembershipView mergeMembershipView() {
-        MembershipView merged = new MembershipView(new MembershipTable(), new MembershipLog());
+    private MembershipView mergeMembershipViews() {
+        MembershipView merged = new MembershipView(this.store.getMembershipTable(), this.store.getMembershipLog()); // Store view
         for (var pair : this.membershipViews.entrySet()) {
             merged = mergeTwoMembershipViews(merged, pair.getValue());
         }
-
-        return mergeTwoMembershipViews(merged, new MembershipView(this.store.getMembershipTable(), this.store.getMembershipLog()));
+        return merged;
     }
 
     // TODO actual merge something
     private MembershipView mergeTwoMembershipViews(MembershipView merged, MembershipView value) {
-        MembershipLog membershipLog = merged.getMembershipLog();
-        MembershipTable membershipTable = merged.getMembershipTable();
-        return new MembershipView(membershipTable, membershipLog);
+        merged.getMembershipLog().mergeLogs(value.getMembershipLog().last32Logs());
+        MembershipTable membershipTable = merged.getMembershipTable(); // TODO merge table
+        return new MembershipView(membershipTable, merged.getMembershipLog());
     }
 }

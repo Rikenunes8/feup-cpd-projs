@@ -41,10 +41,6 @@ public class MessageBuilder {
         this.body = msgArr.length < 2 ?  "" : msgArr[1];
     }
 
-    public MessageBuilder(Map<String, String> header, String body) {
-        // TODO if needed
-    }
-
     /**
      * Creates a Join/Leave message with the parameters given
      * @param nodeIP String with the Node IP address
@@ -121,14 +117,19 @@ public class MessageBuilder {
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("Type", "MEMBERSHIP" );
         headerLines.put("NodeIP", nodeIP);
 
-        StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
+
+        StringBuilder message = new StringBuilder();
+        message.append(buildHeader(headerLines));
 
         // BODY
-        message.append(membershipTable.toString());
+        var msTable = membershipTable.toString();
+        var msLog = new MembershipLog(membershipLog.last32Logs()).toString();
+        message.append(msTable);
         message.append("--sep--\n");
-        message.append(membershipLog.toString());
+        message.append(msLog);
 
         return message.toString();
     }
@@ -142,10 +143,22 @@ public class MessageBuilder {
         while (scanner.hasNextLine()) {
             String line = scanner.nextLine();
             if (line.startsWith("--sep--")) incr = false;
-            if (incr) membershipTable.addMembershipInfo(new MembershipInfo(line));
+            else if (incr) membershipTable.addMembershipInfo(new MembershipInfo(line));
             else membershipLog.addMembershipInfo(new MembershipLogRecord(line));
         }
+        System.out.println("PARSED");
+        System.out.println(membershipTable);
+        System.out.println(membershipLog);
         return new MembershipView(membershipTable, membershipLog);
+    }
+
+    public static String clientMessage(String op, String arg) {
+        // Setting up the header
+        Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("NodeIP", "CLIENT");
+        headerLines.put("Type", op);
+
+        return buildHeader(headerLines) + arg;
     }
 
     /**

@@ -1,15 +1,12 @@
 
+import membership.MembershipView;
 import messages.MessageBuilder;
 import messages.TcpMessager;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.Socket;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
+import static messages.MessageBuilder.parseMembershipMessage;
 import static messages.MulticastMessager.receiveMcastMessage;
 
 public class ListenerMcastThread implements Runnable {
@@ -24,18 +21,19 @@ public class ListenerMcastThread implements Runnable {
         // ExecutorService executor = Executors.newFixedThreadPool(4);
         while (this.store.getMembershipCounter() % 2 == 0) {
             try {
-                String msg = receiveMcastMessage(store.getRcvDatagramSocket());
+                String msg = receiveMcastMessage(this.store.getRcvDatagramSocket());
                 MessageBuilder message = new MessageBuilder(msg);
                 
                 Map<String, String> header = message.getHeader();
                 switch (header.get("Type")) {
-                    case "JOIN" -> joinHandler(header);
-                    case "LEAVE" -> leaveHandler(header);
+                    case "JOIN" -> this.joinHandler(header);
+                    case "LEAVE" -> this.leaveHandler(header);
+                    case "MEMBERSHIP" -> this.membershipHandler(message);
                     default -> System.out.println("Type case not implemented");
                 }
                 System.out.println("---- MS VIEW AFTER LISTENING MCAST----");
-                System.out.println("MS Log:\n" + store.getMembershipLog());
-                System.out.println("MS Tab:\n" + store.getMembershipTable());
+                System.out.println("MS Log:\n" + this.store.getMembershipLog());
+                System.out.println("MS Tab:\n" + this.store.getMembershipTable());
                 System.out.println("---- END MS VIEW ----");
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -51,7 +49,7 @@ public class ListenerMcastThread implements Runnable {
         int nodePort  = Integer.parseInt(header.get("Port"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
 
-        this.store.addJoinLeaveEvent(nodeIP, nodePort, msCounter);
+        this.store.updateMembershipView(nodeIP, nodePort, msCounter);
 
         if (!this.store.getNodeIP().equals(nodeIP)) {
             String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipLog(), this.store.getMembershipTable(), this.store.getNodeIP());
@@ -65,7 +63,12 @@ public class ListenerMcastThread implements Runnable {
         String nodeIP = header.get("NodeIP");
         int nodePort  = Integer.parseInt(header.get("Port"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
-        this.store.addJoinLeaveEvent(nodeIP, nodePort, msCounter);
+        this.store.updateMembershipView(nodeIP, nodePort, msCounter);
+    }
+
+    private void membershipHandler(MessageBuilder message) {
+        MembershipView view = parseMembershipMessage(message);
+        this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
     }
 
 }

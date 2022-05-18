@@ -14,7 +14,7 @@ public class MembershipLogRecord {
     }
     public MembershipLogRecord(String ipAndCounter) {
         ipAndCounter = ipAndCounter.trim();
-        Pattern p = Pattern.compile("^\\d^\\..");
+        Pattern p = Pattern.compile("[^\\d\\.]");
         Matcher m = p.matcher(ipAndCounter);
         if (m.find()) {
             this.nodeIP = ipAndCounter.substring(0, m.start());
@@ -35,7 +35,7 @@ public class MembershipLogRecord {
 
     @Override
     public String toString(){
-        return nodeIP + " | " + counter;
+        return nodeIP + "|" + counter;
     }
 
     @Override

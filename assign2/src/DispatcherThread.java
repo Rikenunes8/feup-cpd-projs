@@ -1,3 +1,4 @@
+import messages.MessageBuilder;
 import messages.TcpMessager;
 
 import java.io.BufferedReader;
@@ -5,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.util.Map;
 
 public class DispatcherThread implements Runnable{
     private final Socket socket;
@@ -19,11 +21,14 @@ public class DispatcherThread implements Runnable{
     public void run() {
         try {
             String msg = TcpMessager.receiveMessage(socket);
+            System.out.println(msg);
+            MessageBuilder message = new MessageBuilder(msg);
 
-            switch (msg) {
-                case "join" -> store.join();
-                case "leave" -> store.leave();
-                case "show" -> { // TODO DEBUG
+            Map<String, String> header = message.getHeader();
+            switch (header.get("Type")) {
+                case "JOIN" -> store.join();
+                case "LEAVE" -> store.leave();
+                case "SHOW" -> { // TODO DEBUG
                     System.out.println("\n--- MEMBERSHIP VIEW ---");
                     System.out.println("Membership Table");
                     System.out.println(store.getMembershipTable());

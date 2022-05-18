@@ -1,3 +1,5 @@
+import messages.MessageBuilder;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -37,7 +39,7 @@ public class TestClient {
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
                     OutputStream output = socket.getOutputStream();
                     PrintWriter writer = new PrintWriter(output, true);
-                    writer.println("join");
+                    writer.println(MessageBuilder.clientMessage("JOIN", ""));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -47,7 +49,7 @@ public class TestClient {
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
                     OutputStream output = socket.getOutputStream();
                     PrintWriter writer = new PrintWriter(output, true);
-                    writer.println("leave");
+                    writer.println(MessageBuilder.clientMessage("LEAVE", ""));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }

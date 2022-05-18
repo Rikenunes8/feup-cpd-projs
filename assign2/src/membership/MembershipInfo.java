@@ -15,7 +15,7 @@ public class MembershipInfo {
     }
     public MembershipInfo(String ipAndPort) {
         ipAndPort = ipAndPort.trim();
-        Pattern p = Pattern.compile("^\\d^\\..");
+        Pattern p = Pattern.compile("[^\\d\\.]");
         Matcher m = p.matcher(ipAndPort);
         if (m.find()) {
             this.ip = ipAndPort.substring(0, m.start());
