@@ -1,8 +1,6 @@
 import messages.MessageBuilder;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
 import java.util.regex.Pattern;
@@ -37,25 +35,11 @@ public class TestClient {
         switch (operation) {
             case "join" -> {
                 System.out.println("perform join operation nodeAC = " + nodeAC);
-                try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    OutputStream output = socket.getOutputStream();
-                    PrintWriter writer = new PrintWriter(output, true);
-                    writer.println(MessageBuilder.clientMessage("JOIN", ""));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-                sendMessage(nodeIP, nodePort, "join");
+                sendMessage(nodeIP, nodePort, MessageBuilder.clientMessage("JOIN", ""));
             }
             case "leave" ->{
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
-                try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    OutputStream output = socket.getOutputStream();
-                    PrintWriter writer = new PrintWriter(output, true);
-                    writer.println(MessageBuilder.clientMessage("LEAVE", ""));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-                sendMessage(nodeIP, nodePort, "leave");
+                sendMessage(nodeIP, nodePort, MessageBuilder.clientMessage("LEAVE", ""));
             }
             case "put" -> {
                 if (args.length != 4) {

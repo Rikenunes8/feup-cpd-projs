@@ -6,6 +6,7 @@ import membership.MembershipTable;
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
 
+import messages.MessageBuilder;
 import utils.FileUtils;
 import utils.HashUtils;
 

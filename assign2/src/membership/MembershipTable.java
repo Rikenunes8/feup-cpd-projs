@@ -14,6 +14,7 @@ public class MembershipTable {
         this.membershipInfoMap.put(hashedId, mInfo);
     }
 
+
     public void removeMembershipInfo(String hashedId) {
         this.membershipInfoMap.remove(hashedId);
     }
