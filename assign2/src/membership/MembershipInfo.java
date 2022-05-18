@@ -1,8 +1,6 @@
 package membership;
 
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MembershipInfo {
     //TODO: GUARDAR DATA DA INFORMAÇÂO
@@ -16,17 +14,8 @@ public class MembershipInfo {
         this.port = port;
     }
     public MembershipInfo(String ipAndPort) {
-        ipAndPort = ipAndPort.trim();
-        Pattern p = Pattern.compile("[^\\d\\.]");
-        Matcher m = p.matcher(ipAndPort);
-        if (m.find()) {
-            this.ip = ipAndPort.substring(0, m.start());
-            this.port = Integer.parseInt(ipAndPort.substring(m.start()+1));
-        }
-        else {
-            this.ip = "0.0.0.0";
-            this.port = 0;
-        }
+        this.ip = getIPFromString(ipAndPort);
+        this.port = getPortFromString(ipAndPort);
     }
 
     public String getIP() {
@@ -38,11 +27,11 @@ public class MembershipInfo {
     }
 
     public static String getIPFromString(String rec){
-        return rec.split(":")[0];
+        return rec.split(":")[0].trim();
     }
 
-    public static String getPortFromString(String rec){
-        return rec.split(":")[1];
+    public static int getPortFromString(String rec){
+        return Integer.parseInt(rec.split(":")[1].trim());
     }
 
     @Override

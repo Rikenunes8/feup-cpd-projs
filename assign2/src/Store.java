@@ -120,7 +120,8 @@ public class Store implements IMembership, IService {
             this.membershipCounter++;
 
             this.executorMcast = Executors.newWorkStealingPool(2);
-            this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+            // this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+            MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
 
