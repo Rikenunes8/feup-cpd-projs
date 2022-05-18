@@ -27,16 +27,14 @@ public class MembershipTable {
         return this.membershipInfoMap;
     }
 
-    public String getClosestMembershipInfo(String key) {
+    public MembershipInfo getClosestMembershipInfo(String key) {
         Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key);
-        // the key is after the last hashedId in the tree
-        if (closestNode == null) {
-            // : reassign the closest value as the first one in the tree
-            closestNode = this.membershipInfoMap.firstEntry();
-        }
 
-        // return in IP:PORT format
-        return closestNode.getValue().toString();
+        // the key is after the last hashedId in the tree
+        return (closestNode == null)
+                // : reassign the closest value as the first one in the tree
+                ? this.membershipInfoMap.firstEntry().getValue()
+                : closestNode.getValue();
     }
 
     @Override

@@ -37,17 +37,9 @@ public class MembershipInfo {
         return this.port;
     }
 
-    public static String getIPFromString(String rec){
-        return rec.split(":")[0];
-    }
-
-    public static String getPortFromString(String rec){
-        return rec.split(":")[1];
-    }
-
     @Override
     public String toString(){
-        return ip + ":" + port;
+        return this.ip + ":" + this.port;
     }
 
     @Override
