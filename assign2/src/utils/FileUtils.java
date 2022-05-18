@@ -3,12 +3,21 @@ package utils;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Scanner;
 
 public class FileUtils {
 
-    public static void newDirectory(String storage) {
+    public static void createDirectory(String storage) {
+        File directory = new File("network/" + storage);
 
+        boolean createdFlag = false;
+        if (!Files.exists(Paths.get("network/" + storage))) {
+            createdFlag = directory.mkdir();
+        }
+
+        System.out.println("Directory network/" + storage + " CREATED: " + createdFlag);
     }
 
     // TODO

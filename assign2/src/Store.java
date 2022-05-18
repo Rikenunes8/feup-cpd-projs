@@ -126,7 +126,7 @@ public class Store implements IMembership, IService {
             this.executorMcast.execute(new ListenerMcastThread(this));
 
             // TODO make node directory here
-            FileUtils.newDirectory(this.hashedId);
+            FileUtils.createDirectory(this.hashedId);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
