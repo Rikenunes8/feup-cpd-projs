@@ -6,8 +6,8 @@ public class MembershipInfo {
     //TODO: GUARDAR DATA DA INFORMAÇÂO
     //TODO: GUARDAR ESTADO DO NÓ (ADORMECIDO OU NÂO)
 
-    private String ip;
-    private int port;
+    private final String ip;
+    private final int port;
 
     public MembershipInfo(String ip, int port) {
         this.ip = ip;
@@ -23,16 +23,16 @@ public class MembershipInfo {
     }
 
     public static String getIPFromString(String rec){
-        return rec.substring(rec.length() - 7);
+        return rec.split(":")[0];
     }
 
     public static String getPortFromString(String rec){
-        return rec.substring(rec.length() - 5, rec.length()-1);
+        return rec.split(":")[1];
     }
 
     @Override
     public String toString(){
-        return ip + ": " + port;
+        return ip + ":" + port;
     }
 
     @Override

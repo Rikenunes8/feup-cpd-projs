@@ -1,7 +1,4 @@
-import messages.MembershipInfo;
-import messages.MembershipLog;
-import messages.MembershipLogRecord;
-import messages.MembershipTable;
+import messages.*;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
@@ -94,7 +91,7 @@ public class Store implements IMembership, IService {
         this.sndDatagramSocket = null;
         String networkInterfaceStr = "loopback"; // TODO
 
-        this.hashedId = HashUtils.getHashedSha256(this.nodeIP);
+        this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
 
         try {
             this.sndDatagramSocket = new DatagramSocket();
@@ -132,6 +129,9 @@ public class Store implements IMembership, IService {
             this.executorMcast = Executors.newWorkStealingPool(1);
             Runnable work = new ListenerMcastThread(this);
             this.executorMcast.execute(work);
+
+            // TODO make node directory here
+            FileUtils.newDirectory(this.hashedId);
 
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
@@ -182,11 +182,15 @@ public class Store implements IMembership, IService {
 
         // File is saved in the closest node of the key
         String closestNode = this.membershipTable.getClosestMembershipInfo(keyHashed);
-        if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
+        if (closestNode.equals(this.getNodeIPPort())) {
             FileUtils.saveFile(this.hashedId, keyHashed, value);
-            return key;
+            // TODO send to testClient the keyHashed who is responsible to display the key received of the file
+            return keyHashed;
         } else {
+            // TODO
             // otherwise, send a put request to the node that was found closest to the key
+            String message = MessageBuilder.messageStore("PUT", keyHashed, value);
+            // TcpMessager to the closestNode
         }
 
         return null;
@@ -198,10 +202,12 @@ public class Store implements IMembership, IService {
 
         // File (that was requested the content from) is stored in the closest node of the key
         String closestNode = this.membershipTable.getClosestMembershipInfo(key);
-        if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
+        if (closestNode.equals(this.getNodeIPPort())) {
             return FileUtils.getFile(this.hashedId, key);
         } else {
+            // TODO
             // otherwise, send a get request to the node that was found closest to the key
+            String message = MessageBuilder.messageStore("GET", key);
         }
 
         return null;
@@ -213,10 +219,12 @@ public class Store implements IMembership, IService {
 
         // File (that was requested to be deleted) is stored in the closest node of the key
         String closestNode = this.membershipTable.getClosestMembershipInfo(key);
-        if (closestNode.equals(this.nodeIP + ":" + this.storePort)) {
+        if (closestNode.equals(this.getNodeIPPort())) {
             return FileUtils.deleteFile(this.hashedId, key);
         } else {
+            // TODO
             // otherwise, send a delete request to the node that was found closest to the key
+            String message = MessageBuilder.messageStore("DELETE", key);
         }
 
         return false;
@@ -228,14 +236,16 @@ public class Store implements IMembership, IService {
 
     public void addJoinLeaveEvent(String nodeIP, int port, int membershipCounter) {
         if (membershipCounter % 2 == 0)
-            this.membershipTable.addMembershipInfo(new MembershipInfo(nodeIP, port));
+            this.membershipTable.addMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()), new MembershipInfo(nodeIP, port));
         else
-            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(nodeIP));
-            // this.membershipTable.removeMembershipInfo(new MembershipInfo(nodeIP, port));
+            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()));
 
         this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
     }
 
+    private String getNodeIPPort() {
+        return this.nodeIP + ":" + this.storePort;
+    }
 
     public int getPort() {
         return this.storePort;

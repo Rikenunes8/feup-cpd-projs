@@ -9,6 +9,7 @@ public class HashUtils {
 
     public static String getHashedSha256(String value) {
         try {
+            // TODO check if it is thread safe
             MessageDigest encoder = MessageDigest.getInstance("SHA-256");
 
             return String.format("%064x", new BigInteger(1,

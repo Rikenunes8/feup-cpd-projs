@@ -1,21 +1,16 @@
 package messages;
 
-import utils.HashUtils;
-
-import static utils.HashUtils.*;
-
 import java.util.*;
 
 public class MembershipTable {
 
-    private TreeMap<String, MembershipInfo> membershipInfoMap;
+    private final TreeMap<String, MembershipInfo> membershipInfoMap;
 
     public MembershipTable() {
-        this.membershipInfoMap = new TreeMap<String, MembershipInfo>();
+        this.membershipInfoMap = new TreeMap<>();
     }
 
-    public void addMembershipInfo(MembershipInfo mInfo) {
-        String hashedId = HashUtils.getHashedSha256(mInfo.getIP());
+    public void addMembershipInfo(String hashedId, MembershipInfo mInfo) {
         this.membershipInfoMap.put(hashedId, mInfo);
     }
 
@@ -32,10 +27,6 @@ public class MembershipTable {
     }
 
     public String getClosestMembershipInfo(String key) {
-        // TODO: binary search to find the IP:PORT of the node closest to the key (comparing the hashIds of the MembershipInfo)
-        // if not equal, find the interval that it should be and return the successor
-        // extreme case - when it would be after the last one send the first one
-
         Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key);
         // the key is after the last hashedId in the tree
         if (closestNode == null) {
@@ -43,6 +34,7 @@ public class MembershipTable {
             closestNode = this.membershipInfoMap.firstEntry();
         }
 
+        // return in IP:PORT format
         return closestNode.getValue().toString();
     }
 

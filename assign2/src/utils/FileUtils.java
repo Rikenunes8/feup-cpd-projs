@@ -7,9 +7,15 @@ import java.util.Scanner;
 
 public class FileUtils {
 
+    public static void newDirectory(String storage) {
+
+    }
+
+    // TODO
+    // JAVA NIO -> NON BLOCKING IO
     public static void saveFile(String storage, String key, String value) {
         try {
-            File keyFile = new File("network/" + storage + "/" + key);
+            File keyFile = new File("network/" + storage + "/" + key + ".txt");
 
             if (!keyFile.exists()) {
                 if (!keyFile.createNewFile()) {
@@ -24,7 +30,7 @@ public class FileUtils {
                 return;
             }
 
-            FileWriter keyFileWriter = new FileWriter("network/" + storage + "/" + key, false);
+            FileWriter keyFileWriter = new FileWriter("network/" + storage + "/" + key + ".txt", false);
 
             keyFileWriter.write(value);
             keyFileWriter.close();
@@ -39,7 +45,7 @@ public class FileUtils {
 
     public static String getFile(String storage, String key) {
         try {
-            File keyFile = new File("network/" + storage + "/" + key);
+            File keyFile = new File("network/" + storage + "/" + key + ".txt");
 
             if (!keyFile.exists()) {
                 System.out.println("In node " + storage + " there doesn't exist any value associated with the key: " + key);
@@ -67,7 +73,7 @@ public class FileUtils {
     }
 
     public static boolean deleteFile(String storage, String key) {
-        File keyFile = new File("network/" + storage + "/" + key);
+        File keyFile = new File("network/" + storage + "/" + key + ".txt");
 
         if (!keyFile.exists()) {
             System.out.println("In node " + storage + " there doesn't exist any value associated with the key: " + key);
