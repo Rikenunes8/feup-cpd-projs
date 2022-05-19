@@ -31,10 +31,6 @@ public class ListenerMcastThread implements Runnable {
                     case "MEMBERSHIP" -> this.membershipHandler(message);
                     default -> System.out.println("Type case not implemented");
                 }
-                System.out.println("---- MS VIEW AFTER LISTENING MCAST----");
-                System.out.println("MS Log:\n" + this.store.getMembershipView().getMembershipLog());
-                System.out.println("MS Tab:\n" + this.store.getMembershipView().getMembershipTable());
-                System.out.println("---- END MS VIEW ----");
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -67,6 +63,7 @@ public class ListenerMcastThread implements Runnable {
     }
 
     private void membershipHandler(MessageBuilder message) {
+        System.out.println("Multicast Membership Message received");
         MembershipView view = parseMembershipMessage(message);
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
     }

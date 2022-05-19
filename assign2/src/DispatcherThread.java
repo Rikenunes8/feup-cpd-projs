@@ -21,7 +21,6 @@ public class DispatcherThread implements Runnable{
     public void run() {
         try {
             String msg = TcpMessager.receiveMessage(socket);
-            System.out.println(msg);
             MessageBuilder message = new MessageBuilder(msg);
 
             Map<String, String> header = message.getHeader();

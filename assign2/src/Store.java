@@ -52,6 +52,9 @@ public class Store implements IMembership, IService {
         }
     }
 
+    private static String usage() {
+        return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
+    }
     private static Store parseArgs(String[] args) {
         InetAddress mcastAddr;
         int mcastPort;
@@ -71,10 +74,6 @@ public class Store implements IMembership, IService {
         return new Store(mcastAddr, mcastPort, nodeIP, storePort);
     }
 
-    private static String usage() {
-        return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
-    }
-
     public Store(InetAddress mcastAddr, int mcastPort, String nodeIP, int storePort) {
         this.mcastAddr = mcastAddr;
         this.mcastPort = mcastPort;
@@ -87,6 +86,7 @@ public class Store implements IMembership, IService {
         String networkInterfaceStr = "loopback"; // TODO
 
         this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
+        System.out.println("HashID: " + hashedId);
 
         try {
             this.sndDatagramSocket = new DatagramSocket();
@@ -245,14 +245,18 @@ public class Store implements IMembership, IService {
 
     private void timerTask() {
         // Compare hashedID with the smaller hashedID in the cluster view
-        boolean smaller = hashedId.equals(this.membershipView.getMembershipTable().getMembershipInfoMap().firstKey());
+        var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
+        boolean smaller = !infoMap.isEmpty() && hashedId.equals(infoMap.firstKey());
+        System.out.println("Am I the smaller: " + smaller);
 
         if (this.executorTimerTask == null && smaller) {
-            this.executorMcast = Executors.newScheduledThreadPool(1);
+            System.out.println("Alarm setted");
+            this.executorTimerTask = Executors.newScheduledThreadPool(1);
             String msg = MessageBuilder.membershipMessage(this.membershipView, nodeIP);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this, msg), 0, 3, TimeUnit.SECONDS);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this, msg), 0, 10, TimeUnit.SECONDS);
         }
         else if (this.executorTimerTask != null && !smaller) {
+            System.out.println("Alarm canceled");
             // TODO does this work
             this.executorTimerTask.shutdown();
             try {

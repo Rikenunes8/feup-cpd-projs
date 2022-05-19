@@ -18,6 +18,7 @@ public class AlarmThread implements Runnable{
 
     @Override
     public void run() {
+        System.out.println("Sending alarm");
         try {
             sendMcastMessage(this.msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());
         } catch (IOException e) {

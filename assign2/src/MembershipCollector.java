@@ -40,7 +40,6 @@ public class MembershipCollector {
                 System.out.println("Join message sent!");
                 send = false;
             }
-            System.out.println("+ WMembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
             var entry = membershipReaderTask(serverSocket);
             if (entry != null) membershipViews.put(entry.getKey(), entry.getValue());
@@ -60,16 +59,11 @@ public class MembershipCollector {
 
     private static Map.Entry<String, MembershipView> membershipReaderTask(ServerSocket serverSocket) {
         try {
-            System.out.println("Waiting for accepting membershipMessages [MRT]");
             serverSocket.setSoTimeout(TIMEOUT);
             Socket socket = serverSocket.accept();
-            System.out.println("MembershipMessage accepted [MRT]");
 
             System.out.println("New membership connection");
             String msg = TcpMessager.receiveMessage(socket);
-            System.out.println("--- Membership Message Received ---");
-            System.out.println(msg); // TODO DEBUG
-            System.out.println("--- END membership message ---");
 
             MessageBuilder message = new MessageBuilder(msg);
             String id = message.getHeader().get("NodeIP");

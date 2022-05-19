@@ -1,4 +1,3 @@
-import membership.MembershipLog;
 import membership.MembershipTable;
 import membership.MembershipView;
 import messages.MessageBuilder;
@@ -16,7 +15,7 @@ import java.util.concurrent.*;
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.sendMcastMessage;
 
-public class MembershipCollectorThread implements Runnable {
+public class _MembershipCollectorThread implements Runnable {
     private static final int TIMEOUT = 1000;
     private static final int MAX_JOINS = 2;
     private static final int MAX_MS_MSG = 2;
@@ -25,7 +24,7 @@ public class MembershipCollectorThread implements Runnable {
     private final ServerSocket serverSocket;
     private final Store store;
 
-    public MembershipCollectorThread(ServerSocket serverSocket, Store store) {
+    public _MembershipCollectorThread(ServerSocket serverSocket, Store store) {
         this.store = store;
         this.serverSocket = serverSocket;
         this.membershipViews = new ConcurrentHashMap<>();
