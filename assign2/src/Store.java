@@ -1,7 +1,4 @@
-import membership.MembershipInfo;
-import membership.MembershipLog;
-import membership.MembershipLogRecord;
-import membership.MembershipTable;
+import membership.*;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
@@ -12,6 +9,7 @@ import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -25,8 +23,7 @@ public class Store implements IMembership, IService {
     private final String hashedId;
 
     private int membershipCounter;
-    private MembershipLog membershipLog;
-    private MembershipTable membershipTable;
+    private MembershipView membershipView;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -87,8 +84,7 @@ public class Store implements IMembership, IService {
         this.storePort = storePort;
 
         this.membershipCounter = -1;
-        this.membershipLog = new MembershipLog(); // TODO
-        this.membershipTable = new MembershipTable(); // TODO
+        this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         String networkInterfaceStr = "loopback"; // TODO
 
@@ -146,7 +142,7 @@ public class Store implements IMembership, IService {
 
             // Notice cluster members of my leave
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter, 0);
-            sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
+            sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
 
@@ -186,7 +182,7 @@ public class Store implements IMembership, IService {
         String keyHashed = (key == null) ? HashUtils.getHashedSha256(value) : key;
 
         // File is saved in the closest node of the key
-        String closestNode = this.membershipTable.getClosestMembershipInfo(keyHashed);
+        String closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
         if (closestNode.equals(this.getNodeIPPort())) {
             FileUtils.saveFile(this.hashedId, keyHashed, value);
             // TODO send to testClient the keyHashed who is responsible to display the key received of the file
@@ -206,7 +202,7 @@ public class Store implements IMembership, IService {
         // Argument is the key returned by put
 
         // File (that was requested the content from) is stored in the closest node of the key
-        String closestNode = this.membershipTable.getClosestMembershipInfo(key);
+        String closestNode = this.membershipView.getClosestMembershipInfo(key);
         if (closestNode.equals(this.getNodeIPPort())) {
             return FileUtils.getFile(this.hashedId, key);
         } else {
@@ -223,7 +219,7 @@ public class Store implements IMembership, IService {
         // Argument is the key returned by put
 
         // File (that was requested to be deleted) is stored in the closest node of the key
-        String closestNode = this.membershipTable.getClosestMembershipInfo(key);
+        String closestNode = this.membershipView.getClosestMembershipInfo(key);
         if (closestNode.equals(this.getNodeIPPort())) {
             return FileUtils.deleteFile(this.hashedId, key);
         } else {
@@ -236,17 +232,13 @@ public class Store implements IMembership, IService {
     }
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        // TODO merge table
-        this.membershipLog.mergeLogs(membershipLog.last32Logs());
+        this.membershipView.merge(membershipTable, membershipLog);
     }
-
     public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
-        if (membershipCounter % 2 == 0)
-            this.membershipTable.addMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()), new MembershipInfo(nodeIP, port));
-        else
-            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()));
-
-        this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
+        this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
+    }
+    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+        this.membershipView.mergeMembershipViews(membershipViews);
     }
 
     public String getNodeIP() {
@@ -273,17 +265,15 @@ public class Store implements IMembership, IService {
     public int getMembershipCounter() {
         return this.membershipCounter;
     }
-    public MembershipLog getMembershipLog() {
-        return membershipLog;
+    public MembershipView getMembershipView() {
+        return membershipView;
     }
-    public MembershipTable getMembershipTable() {
-        return membershipTable;
+
+    public void setMembershipView(MembershipView membershipView) {
+        this.membershipView = membershipView;
     }
-    
-    public void setMembershipLog(MembershipLog membershipLog) {
-        this.membershipLog = membershipLog;
-    }
-    public void setMembershipTable(MembershipTable membershipTable) {
-        this.membershipTable = membershipTable;
+    public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        this.membershipView.setMembershipTable(membershipTable);
+        this.membershipView.setMembershipLog(membershipLog);
     }
 }

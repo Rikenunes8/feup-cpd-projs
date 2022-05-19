@@ -13,6 +13,10 @@ public class MembershipLog {
         this.logs = logs;
     }
 
+    public List<MembershipLogRecord> getLogs() {
+        return logs;
+    }
+
     public void addMembershipInfo(MembershipLogRecord log){
         var record = this.logs.stream().filter(l -> l.getNodeIP().equals(log.getNodeIP())).findFirst().orElse(null);
         if (record == null) {

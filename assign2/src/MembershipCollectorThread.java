@@ -64,8 +64,7 @@ public class MembershipCollectorThread implements Runnable {
         System.out.println("+ MembershipViews size: " + this.membershipViews.size()); // TODO DEBUG
 
         MembershipView membershipView = this.mergeMembershipViews();
-        this.store.setMembershipTable(membershipView.getMembershipTable());
-        this.store.setMembershipLog(membershipView.getMembershipLog());
+        this.store.setMembershipView(membershipView.getMembershipTable(), membershipView.getMembershipLog());
         System.out.println("Membership views synchronized"); // TODO DEBUG
     }
 
@@ -97,7 +96,7 @@ public class MembershipCollectorThread implements Runnable {
     }
 
     private MembershipView mergeMembershipViews() {
-        MembershipView merged = new MembershipView(this.store.getMembershipTable(), this.store.getMembershipLog()); // Store view
+        MembershipView merged = this.store.getMembershipView();
         for (var pair : this.membershipViews.entrySet()) {
             merged = mergeTwoMembershipViews(merged, pair.getValue());
         }

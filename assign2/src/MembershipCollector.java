@@ -52,9 +52,9 @@ public class MembershipCollector {
 
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
-        MembershipView membershipView = mergeMembershipViews(membershipViews, store);
-        store.setMembershipTable(membershipView.getMembershipTable());
-        store.setMembershipLog(membershipView.getMembershipLog());
+        store.updateMembershipView(store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+        store.mergeMembershipViews(membershipViews);
+
         System.out.println("Membership views synchronized"); // TODO DEBUG
     }
 
@@ -83,15 +83,5 @@ public class MembershipCollector {
         catch (IOException e) { throw new RuntimeException(); }
 
         return null;
-    }
-
-    private static MembershipView mergeMembershipViews(Map<String, MembershipView> membershipViews, Store store) {
-        MembershipView merged = new MembershipView(store.getMembershipTable(), store.getMembershipLog()); // Store view
-        for (var pair : membershipViews.entrySet()) {
-            merged.getMembershipLog().mergeLogs(pair.getValue().getMembershipLog().last32Logs());
-            MembershipTable membershipTable = merged.getMembershipTable(); // TODO merge table
-            merged = new MembershipView(membershipTable, merged.getMembershipLog());
-        }
-        return merged;
     }
 }

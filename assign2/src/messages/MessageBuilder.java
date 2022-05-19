@@ -106,7 +106,7 @@ public class MessageBuilder {
      * @param nodeIP String with the IP of the sender Node, used for the header only
      * @return String with a header and a body correctly formatted
      */
-    public static String membershipMessage(MembershipLog membershipLog, MembershipTable membershipTable, String nodeIP){
+    public static String membershipMessage(MembershipView membershipView, String nodeIP){
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
@@ -118,8 +118,8 @@ public class MessageBuilder {
         message.append(buildHeader(headerLines));
 
         // BODY
-        var msTable = membershipTable.toString();
-        var msLog = new MembershipLog(membershipLog.last32Logs()).toString();
+        var msTable = membershipView.getMembershipTable().toString();
+        var msLog = new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
         message.append(msTable);
         message.append("--sep--\n");
         message.append(msLog);

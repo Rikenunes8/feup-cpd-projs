@@ -32,8 +32,8 @@ public class ListenerMcastThread implements Runnable {
                     default -> System.out.println("Type case not implemented");
                 }
                 System.out.println("---- MS VIEW AFTER LISTENING MCAST----");
-                System.out.println("MS Log:\n" + this.store.getMembershipLog());
-                System.out.println("MS Tab:\n" + this.store.getMembershipTable());
+                System.out.println("MS Log:\n" + this.store.getMembershipView().getMembershipLog());
+                System.out.println("MS Tab:\n" + this.store.getMembershipView().getMembershipTable());
                 System.out.println("---- END MS VIEW ----");
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -52,7 +52,7 @@ public class ListenerMcastThread implements Runnable {
         this.store.updateMembershipView(nodeIP, nodePort, msCounter);
 
         if (!this.store.getNodeIP().equals(nodeIP)) {
-            String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipLog(), this.store.getMembershipTable(), this.store.getNodeIP());
+            String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
             try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
             catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
         }
