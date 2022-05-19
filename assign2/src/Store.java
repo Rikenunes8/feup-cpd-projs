@@ -9,10 +9,7 @@ import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 
 public class Store implements IMembership, IService {
@@ -31,6 +28,7 @@ public class Store implements IMembership, IService {
     private DatagramSocket rcvDatagramSocket;
 
     private ExecutorService executorMcast;
+    private ScheduledExecutorService executorTimerTask;
 
     // TODO everything
     public static void main(String[] args) {
@@ -233,12 +231,38 @@ public class Store implements IMembership, IService {
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         this.membershipView.merge(membershipTable, membershipLog);
+        timerTask();
     }
+
     public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
         this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
+        timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
         this.membershipView.mergeMembershipViews(membershipViews);
+        timerTask();
+    }
+
+    private void timerTask() {
+        // Compare hashedID with the smaller hashedID in the cluster view
+        boolean smaller = hashedId.equals(this.membershipView.getMembershipTable().getMembershipInfoMap().firstKey());
+
+        if (this.executorTimerTask == null && smaller) {
+            this.executorMcast = Executors.newScheduledThreadPool(1);
+            String msg = MessageBuilder.membershipMessage(this.membershipView, nodeIP);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this, msg), 0, 3, TimeUnit.SECONDS);
+        }
+        else if (this.executorTimerTask != null && !smaller) {
+            // TODO does this work
+            this.executorTimerTask.shutdown();
+            try {
+                this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace(); // TODO
+            }
+            if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
+            this.executorTimerTask = null;
+        }
     }
 
     public String getNodeIP() {
