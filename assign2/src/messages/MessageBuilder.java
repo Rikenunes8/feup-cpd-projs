@@ -7,6 +7,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
+// TODO new message format to send back to test client hashedKey in put and value in file
+
 public class MessageBuilder {
     static final char CR = 0xD;
     static final char LF = 0xA;

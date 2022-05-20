@@ -178,38 +178,38 @@ public class Store implements IMembership, IService {
     @Override
     public String put(String key, String value) {
 
+        // CALCULATE KEY FROM FILE VALUE
         String keyHashed = (key == null) ? HashUtils.getHashedSha256(value) : key;
 
-        // File is saved in the closest node of the key
+        // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             FileUtils.saveFile(this.hashedId, keyHashed, value);
-            // TODO send to testClient the keyHashed who is responsible to display the key received of the file
-            return keyHashed;
         } else {
             try {
-                String message = MessageBuilder.messageStore("PUT", keyHashed, value);
-                TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), message);
+                // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
+                String requestMessage = MessageBuilder.messageStore("PUT", keyHashed, value);
+                TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), requestMessage);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
 
-        return null;
+        return keyHashed;
     }
 
     @Override
     public String get(String key) {
-        // Argument is the key returned by put
 
         // File (that was requested the content from) is stored in the closest node of the key
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             return FileUtils.getFile(this.hashedId, key);
         } else {
-            try {
-                String message = MessageBuilder.messageStore("GET", key);
-                TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), message);
+            try (Socket socket = new Socket(closestNode.getIP(), closestNode.getPort())) {
+                // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
+                TcpMessager.sendMessage(socket, MessageBuilder.messageStore("GET", key));
+                return TcpMessager.receiveMessage(socket);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -219,13 +219,13 @@ public class Store implements IMembership, IService {
     }
 
     @Override
-    public boolean delete(String key) {
+    public void delete(String key) {
         // Argument is the key returned by put
 
         // File (that was requested to be deleted) is stored in the closest node of the key
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
         if (closestNode.toString().equals(this.getNodeIPPort())) {
-            return FileUtils.deleteFile(this.hashedId, key);
+            FileUtils.deleteFile(this.hashedId, key);
         } else {
             try {
                 String message = MessageBuilder.messageStore("DELETE", key);
@@ -234,8 +234,6 @@ public class Store implements IMembership, IService {
                 e.printStackTrace();
             }
         }
-
-        return false;
     }
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {

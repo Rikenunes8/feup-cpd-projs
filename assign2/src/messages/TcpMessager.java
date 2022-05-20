@@ -10,12 +10,13 @@ import static messages.MessageBuilder.LF;
 public class TcpMessager {
     public static void sendMessage(String ip, int port, String message) throws IOException {
         try (Socket socket = new Socket(ip, port)) {
-            OutputStream output = socket.getOutputStream();
-            PrintWriter writer = new PrintWriter(output, true);
-            writer.println(message);
-        } catch (IOException e) {
-            throw e;
+            sendMessage(socket, message);
         }
+    }
+    public static void sendMessage(Socket socket, String message) throws IOException {
+        OutputStream output = socket.getOutputStream();
+        PrintWriter writer = new PrintWriter(output, true);
+        writer.println(message);
     }
     public static String receiveMessage(Socket socket) throws IOException {
         InputStream input = socket.getInputStream();

@@ -27,6 +27,15 @@ public class DispatcherThread implements Runnable{
             switch (header.get("Type")) {
                 case "JOIN" -> store.join();
                 case "LEAVE" -> store.leave();
+                case "PUT" -> {
+                    String response = store.put(header.get("Key"), message.getBody());
+                    TcpMessager.sendMessage(socket, response);
+                }
+                case "GET" -> {
+                    String response = store.get(header.get("Key"));
+                    TcpMessager.sendMessage(socket, response);
+                }
+                case "DELETE" -> store.delete(header.get("Key"));
                 default -> System.out.println("Operation not implemented");
             }
             this.socket.close();

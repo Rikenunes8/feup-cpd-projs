@@ -93,21 +93,21 @@ public class _Node implements IService {
     }
 
     @Override
-    public boolean delete(String key) {
+    public void delete(String key) {
         File keyFile = new File("network/" + this.getIdHashed() + "/" + key);
 
         if (!keyFile.exists()) {
             System.out.println("In node " + this.getIdHashed() + " there doesn't exist any value associated with the key: " + key);
-            return false;
+            return;
         }
 
         if(keyFile.delete()){
             System.out.println("Successfully deleted key-value pair in node " + this.getIdHashed());
-            return true;
+            return;
         }
         else {
             System.out.println("An error occurred when deleting key-value pair in node " + this.getIdHashed());
-            return false;
+            return;
         }
     }
 }
