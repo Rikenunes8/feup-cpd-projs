@@ -100,13 +100,11 @@ public class MessageBuilder {
 
     /**
      * Creates a membership message based on the parameters given
-     * @param membershipLog MembershipLog with a max size of 32, containing the most recent membership log info
-     * @param membershipTable MembershipTable, contains information about all the nodes in current use according
-     *                        to a specific node
+     * @param membershipView MembershipView, contains a MembershipTable and a MembershipLog
      * @param nodeIP String with the IP of the sender Node, used for the header only
      * @return String with a header and a body correctly formatted
      */
-    public static String membershipMessage(MembershipLog membershipLog, MembershipTable membershipTable, String nodeIP){
+    public static String membershipMessage(MembershipView membershipView, String nodeIP){
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
@@ -118,8 +116,8 @@ public class MessageBuilder {
         message.append(buildHeader(headerLines));
 
         // BODY
-        var msTable = membershipTable.toString();
-        var msLog = new MembershipLog(membershipLog.last32Logs()).toString();
+        var msTable = membershipView.getMembershipTable().toString();
+        var msLog = new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
         message.append(msTable);
         message.append("--sep--\n");
         message.append(msLog);
@@ -139,9 +137,6 @@ public class MessageBuilder {
             else if (incr) membershipTable.addMembershipInfo(HashUtils.getHashedSha256(line.trim()), new MembershipInfo(line));
             else membershipLog.addMembershipInfo(new MembershipLogRecord(line));
         }
-        System.out.println("PARSED");
-        System.out.println(membershipTable);
-        System.out.println(membershipLog);
         return new MembershipView(membershipTable, membershipLog);
     }
 

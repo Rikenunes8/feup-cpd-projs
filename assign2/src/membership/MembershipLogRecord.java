@@ -13,17 +13,15 @@ public class MembershipLogRecord {
         this.counter = counter;
     }
     public MembershipLogRecord(String ipAndCounter) {
-        ipAndCounter = ipAndCounter.trim();
-        Pattern p = Pattern.compile("[^\\d\\.]");
-        Matcher m = p.matcher(ipAndCounter);
-        if (m.find()) {
-            this.nodeIP = ipAndCounter.substring(0, m.start());
-            this.counter = Integer.parseInt(ipAndCounter.substring(m.start()+1));
-        }
-        else {
-            this.nodeIP = "0.0.0.0";
-            this.counter = -1;
-        }
+        this.nodeIP = getIPFromString(ipAndCounter);
+        this.counter = getCounterFromString(ipAndCounter);
+    }
+
+    private static String getIPFromString(String rec) {
+        return rec.split("\\|")[0].trim();
+    }
+    private static int getCounterFromString(String rec) {
+        return Integer.parseInt(rec.split("\\|")[1].trim());
     }
 
     public String getNodeIP() {

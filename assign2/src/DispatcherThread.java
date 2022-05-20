@@ -21,21 +21,12 @@ public class DispatcherThread implements Runnable{
     public void run() {
         try {
             String msg = TcpMessager.receiveMessage(socket);
-            System.out.println(msg);
             MessageBuilder message = new MessageBuilder(msg);
 
             Map<String, String> header = message.getHeader();
             switch (header.get("Type")) {
                 case "JOIN" -> store.join();
                 case "LEAVE" -> store.leave();
-                case "SHOW" -> { // TODO DEBUG
-                    System.out.println("\n--- MEMBERSHIP VIEW ---");
-                    System.out.println("Membership Table");
-                    System.out.println(store.getMembershipTable());
-                    System.out.println("Membership Logs");
-                    System.out.println(store.getMembershipLog());
-                    System.out.println("--- END MEMBERSHIP VIEW ---\n");
-                }
                 default -> System.out.println("Operation not implemented");
             }
             this.socket.close();

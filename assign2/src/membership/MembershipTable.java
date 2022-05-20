@@ -1,6 +1,7 @@
 package membership;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class MembershipTable {
 
@@ -19,8 +20,8 @@ public class MembershipTable {
         this.membershipInfoMap.remove(hashedId);
     }
 
-    public Set<MembershipInfo> getMembershipInfoList() {
-        return new HashSet<>(this.membershipInfoMap.values());
+    public Map<String, String> getMembershipInfoList() {
+        return this.membershipInfoMap.entrySet().stream().collect(Collectors.toMap(entry -> entry.getValue().getIP(), Map.Entry::getKey));
     }
 
     public TreeMap<String, MembershipInfo> getMembershipInfoMap() {
@@ -45,5 +46,14 @@ public class MembershipTable {
             ret.append("\n");
         }
         return ret.toString();
+    }
+
+    public void mergeTable(MembershipTable membershipTable) {
+        var aux = membershipTable.getMembershipInfoMap();
+        for (var key : aux.keySet()) {
+            if (!this.membershipInfoMap.containsKey(key)) {
+                this.membershipInfoMap.put(key, aux.get(key));
+            }
+        }
     }
 }

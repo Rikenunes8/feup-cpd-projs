@@ -20,8 +20,6 @@ public class TcpMessager {
     public static String receiveMessage(Socket socket) throws IOException {
         InputStream input = socket.getInputStream();
         BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-        String aux = reader.lines().collect(Collectors.joining(Character.toString(CR) + LF));
-        System.out.println(aux);
-        return aux;
+        return reader.lines().collect(Collectors.joining(Character.toString(CR) + LF));
     }
 }

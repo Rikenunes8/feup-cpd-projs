@@ -1,7 +1,4 @@
-import membership.MembershipInfo;
-import membership.MembershipLog;
-import membership.MembershipLogRecord;
-import membership.MembershipTable;
+import membership.*;
 
 import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
@@ -13,9 +10,7 @@ import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 
 public class Store implements IMembership, IService {
@@ -26,8 +21,7 @@ public class Store implements IMembership, IService {
     private final String hashedId;
 
     private int membershipCounter;
-    private MembershipLog membershipLog;
-    private MembershipTable membershipTable;
+    private MembershipView membershipView;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -35,6 +29,7 @@ public class Store implements IMembership, IService {
     private DatagramSocket rcvDatagramSocket;
 
     private ExecutorService executorMcast;
+    private ScheduledExecutorService executorTimerTask;
 
     // TODO everything
     public static void main(String[] args) {
@@ -58,6 +53,9 @@ public class Store implements IMembership, IService {
         }
     }
 
+    private static String usage() {
+        return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
+    }
     private static Store parseArgs(String[] args) {
         InetAddress mcastAddr;
         int mcastPort;
@@ -77,10 +75,6 @@ public class Store implements IMembership, IService {
         return new Store(mcastAddr, mcastPort, nodeIP, storePort);
     }
 
-    private static String usage() {
-        return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
-    }
-
     public Store(InetAddress mcastAddr, int mcastPort, String nodeIP, int storePort) {
         this.mcastAddr = mcastAddr;
         this.mcastPort = mcastPort;
@@ -88,12 +82,12 @@ public class Store implements IMembership, IService {
         this.storePort = storePort;
 
         this.membershipCounter = -1;
-        this.membershipLog = new MembershipLog(); // TODO
-        this.membershipTable = new MembershipTable(); // TODO
+        this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         String networkInterfaceStr = "loopback"; // TODO
 
         this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
+        System.out.println("HashID: " + hashedId);
 
         try {
             this.sndDatagramSocket = new DatagramSocket();
@@ -121,7 +115,8 @@ public class Store implements IMembership, IService {
             this.membershipCounter++;
 
             this.executorMcast = Executors.newWorkStealingPool(2);
-            this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+            // this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+            MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
 
@@ -146,7 +141,7 @@ public class Store implements IMembership, IService {
 
             // Notice cluster members of my leave
             String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter, 0);
-            sendMcastMessage(msg, this.rcvDatagramSocket, this.mcastAddr, this.mcastPort);
+            sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
 
@@ -186,7 +181,7 @@ public class Store implements IMembership, IService {
         String keyHashed = (key == null) ? HashUtils.getHashedSha256(value) : key;
 
         // File is saved in the closest node of the key
-        MembershipInfo closestNode = this.membershipTable.getClosestMembershipInfo(keyHashed);
+        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             FileUtils.saveFile(this.hashedId, keyHashed, value);
             // TODO send to testClient the keyHashed who is responsible to display the key received of the file
@@ -208,7 +203,7 @@ public class Store implements IMembership, IService {
         // Argument is the key returned by put
 
         // File (that was requested the content from) is stored in the closest node of the key
-        MembershipInfo closestNode = this.membershipTable.getClosestMembershipInfo(key);
+        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             return FileUtils.getFile(this.hashedId, key);
         } else {
@@ -228,7 +223,7 @@ public class Store implements IMembership, IService {
         // Argument is the key returned by put
 
         // File (that was requested to be deleted) is stored in the closest node of the key
-        MembershipInfo closestNode = this.membershipTable.getClosestMembershipInfo(key);
+        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             return FileUtils.deleteFile(this.hashedId, key);
         } else {
@@ -244,17 +239,43 @@ public class Store implements IMembership, IService {
     }
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        // TODO merge table
-        this.membershipLog.mergeLogs(membershipLog.last32Logs());
+        this.membershipView.merge(membershipTable, membershipLog);
+        timerTask();
     }
 
     public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
-        if (membershipCounter % 2 == 0)
-            this.membershipTable.addMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()), new MembershipInfo(nodeIP, port));
-        else
-            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(this.getNodeIPPort()));
+        this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
+        timerTask();
+    }
+    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+        this.membershipView.mergeMembershipViews(membershipViews);
+        timerTask();
+    }
 
-        this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
+    private void timerTask() {
+        // Compare hashedID with the smaller hashedID in the cluster view
+        var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
+        boolean smaller = !infoMap.isEmpty() && hashedId.equals(infoMap.firstKey());
+        System.out.println("Am I the smaller: " + smaller);
+
+        if (this.executorTimerTask == null && smaller) {
+            System.out.println("Alarm setted");
+            this.executorTimerTask = Executors.newScheduledThreadPool(1);
+            String msg = MessageBuilder.membershipMessage(this.membershipView, nodeIP);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this, msg), 0, 10, TimeUnit.SECONDS);
+        }
+        else if (this.executorTimerTask != null && !smaller) {
+            System.out.println("Alarm canceled");
+            // TODO does this work
+            this.executorTimerTask.shutdown();
+            try {
+                this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace(); // TODO
+            }
+            if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
+            this.executorTimerTask = null;
+        }
     }
 
     public String getNodeIP() {
@@ -281,17 +302,15 @@ public class Store implements IMembership, IService {
     public int getMembershipCounter() {
         return this.membershipCounter;
     }
-    public MembershipLog getMembershipLog() {
-        return membershipLog;
+    public MembershipView getMembershipView() {
+        return membershipView;
     }
-    public MembershipTable getMembershipTable() {
-        return membershipTable;
+
+    public void setMembershipView(MembershipView membershipView) {
+        this.membershipView = membershipView;
     }
-    
-    public void setMembershipLog(MembershipLog membershipLog) {
-        this.membershipLog = membershipLog;
-    }
-    public void setMembershipTable(MembershipTable membershipTable) {
-        this.membershipTable = membershipTable;
+    public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        this.membershipView.setMembershipTable(membershipTable);
+        this.membershipView.setMembershipLog(membershipLog);
     }
 }
