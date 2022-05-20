@@ -2,7 +2,6 @@ import messages.MessageBuilder;
 import messages.TcpMessager;
 
 import java.io.*;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
 import java.util.regex.Pattern;
@@ -52,8 +51,9 @@ public class TestClient {
                 System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
                 String value = readFile(filename);
 
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.messageStore("PUT", null, value));
+                // TODO Receiving of the message not working!
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("PUT", null, value));
                     System.out.println(TcpMessager.receiveMessage(socket));
                 }
             }
@@ -65,8 +65,9 @@ public class TestClient {
                 String key = args[2];
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.messageStore("GET", key));
+                // TODO Receiving of the message not working!
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("GET", key));
                     System.out.println(TcpMessager.receiveMessage(socket));
                 }
             }
@@ -77,10 +78,7 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
-
-                try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("DELETE", key));
-                }
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.messageStore("DELETE", key));
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }
@@ -104,6 +102,7 @@ public class TestClient {
         }
     }
 
+    // TODO change to JAVA NIO
     private static String readFile(String pathname) {
         File keyFile = new File(pathname);
         if (!keyFile.exists()) {

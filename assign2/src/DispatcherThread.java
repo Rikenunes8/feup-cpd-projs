@@ -1,10 +1,7 @@
 import messages.MessageBuilder;
 import messages.TcpMessager;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.Socket;
 import java.util.Map;
 
@@ -24,19 +21,27 @@ public class DispatcherThread implements Runnable{
             MessageBuilder message = new MessageBuilder(msg);
 
             Map<String, String> header = message.getHeader();
-            switch (header.get("Type")) {
-                case "JOIN" -> store.join();
-                case "LEAVE" -> store.leave();
-                case "PUT" -> {
-                    String response = store.put(header.get("Key"), message.getBody());
-                    TcpMessager.sendMessage(socket, response);
+            if (header.containsKey("Type")) {
+                switch (header.get("Type")) {
+                    case "JOIN" -> store.join();
+                    case "LEAVE" -> store.leave();
+                    default -> System.out.println("Type not implemented");
                 }
-                case "GET" -> {
-                    String response = store.get(header.get("Key"));
-                    TcpMessager.sendMessage(socket, response);
+            } else if (header.containsKey("Operation")) {
+                switch (header.get("Operation")) {
+                    case "PUT" -> {
+                        String response = store.put(header.get("Key"), message.getBody());
+                        TcpMessager.sendMessage(socket, response);
+                    }
+                    case "GET" -> {
+                        String response = store.get(header.get("Key"));
+                        TcpMessager.sendMessage(socket, response);
+                    }
+                    case "DELETE" -> store.delete(header.get("Key"));
+                    default -> System.out.println("Operation not implemented");
                 }
-                case "DELETE" -> store.delete(header.get("Key"));
-                default -> System.out.println("Operation not implemented");
+            } else {
+                System.out.println("Invalid Message!");
             }
             this.socket.close();
         } catch (IOException e) {
