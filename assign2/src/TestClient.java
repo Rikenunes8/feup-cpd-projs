@@ -37,21 +37,15 @@ public class TestClient {
         int nodePort = Integer.parseInt(nodeACsep[1]);
 
         switch (operation) {
-            case "join" -> {System.out.println("perform join operation nodeAC = " + nodeAC);
-                System.out.println(nodeAC);
+            case "join" -> {
+                System.out.println("perform join operation nodeAC = " + nodeAC);
                 IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/membership");
-                System.out.println("Have service");
                 service.join();
-                System.out.println("Join called");
             }
             case "leave" -> {
-                System.out.println(nodeAC);
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
                 IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/membership");
-                System.out.println("Have service");
                 service.leave();
-                System.out.println("Leave called");
-
             }
             case "put" -> {
                 if (args.length != 4) {

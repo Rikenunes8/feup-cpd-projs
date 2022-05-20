@@ -7,9 +7,13 @@ import messages.MessageBuilder;
 import utils.FileUtils;
 import utils.HashUtils;
 
+import javax.rmi.ssl.SslRMIClientSocketFactory;
 import java.io.*;
 import java.net.*;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.RMIClientSocketFactory;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.concurrent.*;
 
@@ -36,12 +40,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public static void main(String[] args) throws RemoteException, InterruptedException {
         Store store = parseArgs(args);
 
-        Runtime runtime = Runtime.getRuntime();
         // ExecutorService executor = Executors.newWorkStealingPool(8);
+
+        Runtime runtime = Runtime.getRuntime();
         ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
         // according to the number of processors available to the Java virtual machine
 
-        executor.execute(new DispatcherRMIThread(store));
+        Registry registry = LocateRegistry.createRegistry(store.getStorePort());
+        registry.rebind("membership", store);
+
+        // executor.execute(new DispatcherRMIThread(store));
 
         while (true) {
             Thread.sleep(5000);
@@ -111,7 +119,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public boolean join() throws RemoteException{
-        System.out.println("called");
         if (this.membershipCounter % 2 == 0) {
             System.out.println("This node already belongs to a multicast group");
             return false;
@@ -128,13 +135,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             // TODO make node directory here
             FileUtils.newDirectory(this.hashedId);
-
-            while (true) {
-                String msg1 = receiveMcastMessage(this.rcvDatagramSocket);
-                System.out.println(msg1);
-                if (msg1.equals("quit")) break;
-            }
-
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
