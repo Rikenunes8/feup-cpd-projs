@@ -22,9 +22,10 @@ public class Store implements IMembership, IService {
     private final int storePort;
     private final String hashedId;
 
-    private Set<String> keys;
+    private final Set<String> keys;
     private int membershipCounter;
     private MembershipView membershipView;
+    private ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -84,6 +85,7 @@ public class Store implements IMembership, IService {
         this.storePort = storePort;
 
         this.keys = new HashSet<>();
+        this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
@@ -151,8 +153,9 @@ public class Store implements IMembership, IService {
             endMcastReceiver();
 
             // TODO beta
-            this.updateMembershipView(this.nodeIP, this.storePort, this.membershipCounter); // Remove itself from view
-            for (String key : this.keys) {
+            // this.updateMembershipView(this.nodeIP, this.storePort, this.membershipCounter); // Remove itself from view
+            var keysCopy = new HashSet<String>(this.keys);
+            for (String key : keysCopy) {
                 this.transferFile(key);
             }
 
@@ -299,7 +302,7 @@ public class Store implements IMembership, IService {
     }
     public void saveFile(String key, String value) {
         if (FileUtils.saveFile(this.hashedId, key, value)) {
-            keys.add(key);
+            this.keys.add(key);
         }
     }
     public String getFile(String key) {
@@ -321,17 +324,14 @@ public class Store implements IMembership, IService {
     public int getStorePort() {
         return this.storePort;
     }
-    private String getNodeIPPort() {
-        return this.nodeIP + ":" + this.storePort;
+    public String getNodeIPPort() {
+        return HashUtils.joinIpPort(this.nodeIP, this.storePort);
     }
     public InetAddress getMcastAddr() {
         return mcastAddr;
     }
     public int getMcastPort() {
         return mcastPort;
-    }
-    public String getHashedId() {
-        return hashedId;
     }
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
@@ -352,12 +352,19 @@ public class Store implements IMembership, IService {
         return this.membershipView.getClosestMembershipInfo(keyHashed);
     }
 
-    public void setMembershipView(MembershipView membershipView) {
-        this.membershipView = membershipView;
-    }
     public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         this.membershipView.setMembershipTable(membershipTable);
         this.membershipView.setMembershipLog(membershipLog);
+    }
+
+    public void addToPendingQueue(DispatcherThread dispatcherThread) {
+        this.pendingQueue.add(dispatcherThread);
+    }
+    public DispatcherThread removeFromPendingQueue() {
+        return this.pendingQueue.remove();
+    }
+    public boolean isEmptyPendingQueue() {
+        return this.pendingQueue.isEmpty();
     }
 
     public boolean isOnline() {

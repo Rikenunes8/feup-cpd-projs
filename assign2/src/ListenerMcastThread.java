@@ -2,8 +2,10 @@
 import membership.MembershipView;
 import messages.MessageBuilder;
 import messages.TcpMessager;
+import utils.HashUtils;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Map;
 
 import static messages.MessageBuilder.parseMembershipMessage;
@@ -53,9 +55,9 @@ public class ListenerMcastThread implements Runnable {
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
         catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
 
-        // TODO beta
-        for (String key : this.store.getKeys()) {
-            if (this.store.getClosestMembershipInfo(key).getIP().equals(nodeIP)) {
+        var keysCopy = new HashSet<>(this.store.getKeys());
+        for (String key : keysCopy) {
+            if (this.store.getClosestMembershipInfo(key).toString().equals(HashUtils.joinIpPort(nodeIP, nodePort))) {
                 this.store.transferFile(key);
             }
         }
