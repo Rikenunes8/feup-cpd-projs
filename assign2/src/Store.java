@@ -1,6 +1,6 @@
 import membership.*;
 
-import static messages.MessageBuilder.messageJoinLeave;
+import static messages.MessageBuilder.joinLeaveMessage;
 import static messages.MulticastMessager.*;
 
 import messages.MessageBuilder;
@@ -146,7 +146,7 @@ public class Store implements IMembership, IService {
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter, 0);
+            String msg = joinLeaveMessage(this.nodeIP, this.storePort, this.membershipCounter, 0);
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
@@ -234,7 +234,7 @@ public class Store implements IMembership, IService {
         } else {
             try {
                 // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-                String requestMessage = MessageBuilder.messageStore("PUT", keyHashed, value);
+                String requestMessage = MessageBuilder.storeMessage("PUT", keyHashed, value);
                 TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), requestMessage);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -254,7 +254,7 @@ public class Store implements IMembership, IService {
         } else {
             // REDIRECT THE GET REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
             try (Socket socket = new Socket(closestNode.getIP(), closestNode.getPort())) {
-                String requestMessage = MessageBuilder.messageStore("GET", key);
+                String requestMessage = MessageBuilder.storeMessage("GET", key);
                 TcpMessager.sendMessage(socket, requestMessage);
                 return TcpMessager.receiveMessage(socket);
             } catch (IOException e) {
@@ -275,7 +275,7 @@ public class Store implements IMembership, IService {
         } else {
             try {
                 // REDIRECT THE DELETE REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-                String message = MessageBuilder.messageStore("DELETE", key);
+                String message = MessageBuilder.storeMessage("DELETE", key);
                 TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), message);
             } catch (IOException e) {
                 e.printStackTrace();

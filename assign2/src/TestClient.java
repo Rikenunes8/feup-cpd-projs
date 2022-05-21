@@ -52,7 +52,7 @@ public class TestClient {
                 String value = readFile(filename);
 
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("PUT", null, value));
+                    TcpMessager.sendMessage(socket, MessageBuilder.storeMessage("PUT", null, value));
                     String key = TcpMessager.receiveMessage(socket);
                     System.out.println(key);
                 }
@@ -66,7 +66,7 @@ public class TestClient {
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("GET", key));
+                    TcpMessager.sendMessage(socket, MessageBuilder.storeMessage("GET", key));
                     String value = TcpMessager.receiveMessage(socket);
                     System.out.println(value);
                 }
@@ -78,7 +78,7 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.messageStore("DELETE", key));
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("DELETE", key));
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }

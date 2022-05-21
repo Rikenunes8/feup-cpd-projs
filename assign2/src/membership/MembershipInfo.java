@@ -3,9 +3,6 @@ package membership;
 import java.util.Objects;
 
 public class MembershipInfo {
-    //TODO: GUARDAR DATA DA INFORMAÇÂO
-    //TODO: GUARDAR ESTADO DO NÓ (ADORMECIDO OU NÂO)
-
     private final String ip;
     private final int port;
 

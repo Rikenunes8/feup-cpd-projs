@@ -49,8 +49,7 @@ public class MessageBuilder {
      *                          it's a <b>join</b> message, <b>odd</b> values mean it's a <b>leave</b> message
      * @return String containing only a header correctly formatted
      */
-    public static String messageJoinLeave(String nodeIP, int port, int membershipCounter, int msPort) {
-
+    public static String joinLeaveMessage(String nodeIP, int port, int membershipCounter, int msPort) {
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
         headerLines.put("Type", membershipCounter % 2 == 0 ? "JOIN" : "LEAVE");
@@ -58,7 +57,6 @@ public class MessageBuilder {
         headerLines.put("Port", String.valueOf(port));
         headerLines.put("MembershipCounter", String.valueOf(membershipCounter));
         headerLines.put("MembershipPort", String.valueOf(msPort));
-
 
         // NO BODY IN JOIN/LEAVE MESSAGES!!
 
@@ -72,7 +70,7 @@ public class MessageBuilder {
      * @param value String with the value associated with the key <b>NOT ENCODED</b>
      * @return String with a header and body correctly formatted
      */
-    public static String messageStore(String operation, String key, String value) {
+    public static String storeMessage(String operation, String key, String value) {
         // BODY
         String body = operation.equalsIgnoreCase(PUT) ? value : "";
 
@@ -91,8 +89,8 @@ public class MessageBuilder {
      * @param key String with the key <b>NOT ENCODED</b>
      * @return String with a header and body correctly formatted
      */
-    public static String messageStore(String operation, String key) {
-        return messageStore(operation, key, null);
+    public static String storeMessage(String operation, String key) {
+        return storeMessage(operation, key, null);
     }
 
     /**
@@ -123,13 +121,14 @@ public class MessageBuilder {
         MembershipTable membershipTable = new MembershipTable(); // TODO
         MembershipLog membershipLog = new MembershipLog(); // TODO
         String body = message.getBody();
-        boolean incr = true;
+        boolean sep = false;
         Scanner scanner = new Scanner(body);
         while (scanner.hasNextLine()) {
             String line = scanner.nextLine();
-            if (line.startsWith("--sep--")) incr = false;
-            else if (incr) membershipTable.addMembershipInfo(HashUtils.getHashedSha256(line.trim()), new MembershipInfo(line));
-            else membershipLog.addMembershipInfo(new MembershipLogRecord(line));
+            if (line.startsWith("--sep--")) sep = true;
+            else if (sep) membershipLog.addMembershipInfo(new MembershipLogRecord(line));
+            else membershipTable.addMembershipInfo(HashUtils.getHashedSha256(line.trim()), new MembershipInfo(line));
+
         }
         return new MembershipView(membershipTable, membershipLog);
     }

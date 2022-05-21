@@ -12,7 +12,7 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.*;
 
-import static messages.MessageBuilder.messageJoinLeave;
+import static messages.MessageBuilder.joinLeaveMessage;
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class _MembershipCollectorThread implements Runnable {
@@ -35,7 +35,7 @@ public class _MembershipCollectorThread implements Runnable {
         System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
-        String msg = messageJoinLeave(this.store.getNodeIP(), this.store.getStorePort(), this.store.getMembershipCounter(), serverSocket.getLocalPort());
+        String msg = joinLeaveMessage(this.store.getNodeIP(), this.store.getStorePort(), this.store.getMembershipCounter(), serverSocket.getLocalPort());
 
         boolean send = true;
         int attempts = 0;
