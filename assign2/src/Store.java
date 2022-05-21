@@ -37,11 +37,11 @@ public class Store implements IMembership, IService {
 
         Runtime runtime = Runtime.getRuntime();
         // ExecutorService executor = Executors.newWorkStealingPool(8);
-        ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
+        ExecutorService executor = Executors.newFixedThreadPool(1);
         // according to the number of processors available to the Java virtual machine
 
         while (true) {
-            try (ServerSocket serverSocket = new ServerSocket(store.getStorePort())){
+            try (ServerSocket serverSocket = new ServerSocket(store.storePort)){
                 Socket socket = serverSocket.accept();
                 System.out.println("Main connection accepted");
 
@@ -205,16 +205,11 @@ public class Store implements IMembership, IService {
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             return FileUtils.getFile(this.hashedId, key);
         } else {
-            try {
-                // REDIRECT THE GET REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-                String requestMessage = MessageBuilder.messageStore("GET", key);
-                TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), requestMessage);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
             // TODO Receiving of the message not working!
+            // REDIRECT THE GET REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
             try (Socket socket = new Socket(closestNode.getIP(), closestNode.getPort())) {
+                String requestMessage = MessageBuilder.messageStore("GET", key);
+                TcpMessager.sendMessage(socket, requestMessage);
                 return TcpMessager.receiveMessage(socket);
             } catch (IOException e) {
                 e.printStackTrace();

@@ -9,7 +9,7 @@ import java.util.Scanner;
 
 public class FileUtils {
 
-    private static final String STORAGE_ROOT = "src/network/";
+    private static final String STORAGE_ROOT = "network/";
 
     public static void createDirectory(String hashedID) {
         File directory = new File(STORAGE_ROOT + hashedID);

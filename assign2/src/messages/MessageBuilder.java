@@ -32,10 +32,10 @@ public class MessageBuilder {
         System.out.println("\n--- MESSAGE ---");
         System.out.println(msg); // DEBUG
         System.out.println("--- END MESSAGE ---\n");
-        String[] msgArr = msg.split(Character.toString(CR) + LF + CR + LF);
+        String[] msgArr = msg.split("\n\n", 2);
 
         String header = msgArr[0];
-        String[] headerLines = header.split(Character.toString(CR) + LF);
+        String[] headerLines = header.split("\n");
         this.header = new HashMap<>();
         for (String headerLine : headerLines) {
             String[] keyVal = headerLine.split(": ");
@@ -62,6 +62,7 @@ public class MessageBuilder {
         headerLines.put("MembershipCounter", String.valueOf(membershipCounter));
         headerLines.put("MembershipPort", String.valueOf(msPort));
 
+
         // NO BODY IN JOIN/LEAVE MESSAGES!!
 
         return buildHeader(headerLines);
@@ -75,17 +76,18 @@ public class MessageBuilder {
      * @return String with a header and body correctly formatted
      */
     public static String messageStore(String operation, String key, String value) {
+        String body = operation.equalsIgnoreCase(PUT) ? value : "";
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
-        headerLines.put("Operation", operation);
+        headerLines.put("Type", operation);
         headerLines.put("Key", key);
+        headerLines.put("BodySize", String.valueOf(body.length()));
+
 
         StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
-
         // BODY ?
-        if(operation.equalsIgnoreCase(PUT))
-            message.append(value);
+        message.append(body);
 
         return message.toString();
     }
@@ -163,11 +165,9 @@ public class MessageBuilder {
             stringBuilder.append(entry.getKey());
             stringBuilder.append(": ");
             stringBuilder.append(entry.getValue());
-            stringBuilder.append(CR);
-            stringBuilder.append(LF);
+            stringBuilder.append("\n");
         }
-        stringBuilder.append(CR);
-        stringBuilder.append(LF);
+        stringBuilder.append("\n");
         return stringBuilder.toString();
     }
 }

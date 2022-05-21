@@ -51,10 +51,11 @@ public class TestClient {
                 System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
                 String value = readFile(filename);
 
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.messageStore("PUT", null, value));
                 // TODO Receiving of the message not working!
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    System.out.println(TcpMessager.receiveMessage(socket));
+                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("PUT", null, value));
+                    String key = TcpMessager.receiveMessage(socket);
+                    System.out.println(key);
                 }
             }
             case "get" -> {
@@ -65,10 +66,11 @@ public class TestClient {
                 String key = args[2];
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.messageStore("GET", key));
                 // TODO Receiving of the message not working!
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    System.out.println(TcpMessager.receiveMessage(socket));
+                    TcpMessager.sendMessage(socket, MessageBuilder.messageStore("GET", key));
+                    String value = TcpMessager.receiveMessage(socket);
+                    System.out.println(value);
                 }
             }
             case "delete" -> {

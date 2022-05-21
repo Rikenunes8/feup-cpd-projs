@@ -25,10 +25,6 @@ public class DispatcherThread implements Runnable{
                 switch (header.get("Type")) {
                     case "JOIN" -> store.join();
                     case "LEAVE" -> store.leave();
-                    default -> System.out.println("Type not implemented");
-                }
-            } else if (header.containsKey("Operation")) {
-                switch (header.get("Operation")) {
                     case "PUT" -> {
                         String response = store.put(header.get("Key"), message.getBody());
                         TcpMessager.sendMessage(socket, response);
@@ -38,7 +34,7 @@ public class DispatcherThread implements Runnable{
                         TcpMessager.sendMessage(socket, response);
                     }
                     case "DELETE" -> store.delete(header.get("Key"));
-                    default -> System.out.println("Operation not implemented");
+                    default -> System.out.println("Type not implemented");
                 }
             } else {
                 System.out.println("Invalid Message!");
