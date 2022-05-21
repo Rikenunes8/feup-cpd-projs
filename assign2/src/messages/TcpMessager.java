@@ -4,10 +4,6 @@ import java.io.*;
 import java.net.Socket;
 import java.util.AbstractMap;
 import java.util.Map;
-import java.util.stream.Collectors;
-
-import static messages.MessageBuilder.CR;
-import static messages.MessageBuilder.LF;
 
 public class TcpMessager {
     public static void sendMessage(String ip, int port, String message) throws IOException {

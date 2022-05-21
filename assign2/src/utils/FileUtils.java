@@ -83,20 +83,19 @@ public class FileUtils {
         }
     }
 
-    public static boolean deleteFile(String hashedID, String key) {
+    public static void deleteFile(String hashedID, String key) {
         File keyFile = new File(STORAGE_ROOT + hashedID + "/" + key + ".txt");
 
         if (!keyFile.exists()) {
             System.out.println("In node " + hashedID + " there doesn't exist any value associated with the key: " + key);
-            return false;
+            return;
         }
 
         if (keyFile.delete()) {
             System.out.println("Successfully deleted key-value pair in node " + hashedID);
-            return true;
+            return;
         }
 
         System.out.println("An error occurred when deleting key-value pair in node " + hashedID);
-        return false;
     }
 }

@@ -38,6 +38,7 @@ public class Store implements IMembership, IService {
         Runtime runtime = Runtime.getRuntime();
         // ExecutorService executor = Executors.newWorkStealingPool(8);
         ExecutorService executor = Executors.newFixedThreadPool(1);
+        // ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
         // according to the number of processors available to the Java virtual machine
 
         while (true) {
@@ -120,7 +121,6 @@ public class Store implements IMembership, IService {
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
 
-            // TODO make node directory here
             FileUtils.createDirectory(this.hashedId);
 
         } catch (Exception e) {
@@ -178,7 +178,8 @@ public class Store implements IMembership, IService {
     @Override
     public String put(String key, String value) {
         // CALCULATE KEY FROM FILE VALUE
-        String keyHashed = (key == null || key.equals("null")) ? HashUtils.getHashedSha256(value) : key;
+        String keyHashed = (key == null || key.equals("null") || key.isEmpty())
+                ? HashUtils.getHashedSha256(value) : key;
 
         // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
@@ -202,10 +203,10 @@ public class Store implements IMembership, IService {
     public String get(String key) {
         // File (that was requested the content from) is stored in the closest node of the key
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
+
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             return FileUtils.getFile(this.hashedId, key);
         } else {
-            // TODO Receiving of the message not working!
             // REDIRECT THE GET REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
             try (Socket socket = new Socket(closestNode.getIP(), closestNode.getPort())) {
                 String requestMessage = MessageBuilder.messageStore("GET", key);
@@ -223,6 +224,7 @@ public class Store implements IMembership, IService {
     public void delete(String key) {
         // File (that was requested to be deleted) is stored in the closest node of the key
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
+
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             FileUtils.deleteFile(this.hashedId, key);
         } else {

@@ -26,8 +26,10 @@ public class DispatcherThread implements Runnable{
                     case "JOIN" -> store.join();
                     case "LEAVE" -> store.leave();
                     case "PUT" -> {
-                        String response = store.put(header.get("Key"), message.getBody());
-                        TcpMessager.sendMessage(socket, response);
+                        String key = header.get("Key");
+                        String response = store.put(key, message.getBody());
+                        if (key == null || key.equals("null") || key.isEmpty())
+                            TcpMessager.sendMessage(socket, response);
                     }
                     case "GET" -> {
                         String response = store.get(header.get("Key"));

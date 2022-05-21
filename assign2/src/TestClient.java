@@ -51,7 +51,6 @@ public class TestClient {
                 System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
                 String value = readFile(filename);
 
-                // TODO Receiving of the message not working!
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
                     TcpMessager.sendMessage(socket, MessageBuilder.messageStore("PUT", null, value));
                     String key = TcpMessager.receiveMessage(socket);
@@ -66,7 +65,6 @@ public class TestClient {
                 String key = args[2];
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
-                // TODO Receiving of the message not working!
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
                     TcpMessager.sendMessage(socket, MessageBuilder.messageStore("GET", key));
                     String value = TcpMessager.receiveMessage(socket);
