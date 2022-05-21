@@ -74,6 +74,7 @@ public class MessageBuilder {
      * @return String with a header and body correctly formatted
      */
     public static String messageStore(String operation, String key, String value) {
+        // BODY
         String body = operation.equalsIgnoreCase(PUT) ? value : "";
 
         // Setting up the header
@@ -82,12 +83,7 @@ public class MessageBuilder {
         headerLines.put("Key", key);
         headerLines.put("BodySize", String.valueOf(body.length()));
 
-
-        StringBuilder message = new StringBuilder().append(buildHeader(headerLines));
-        // BODY ?
-        message.append(body);
-
-        return message.toString();
+        return buildHeader(headerLines) + body;
     }
 
     /**
@@ -107,24 +103,21 @@ public class MessageBuilder {
      * @return String with a header and a body correctly formatted
      */
     public static String membershipMessage(MembershipView membershipView, String nodeIP){
+        // BODY
+        StringBuilder body = new StringBuilder();
+        var msTable = membershipView.getMembershipTable().toString();
+        var msLog = new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
+        body.append(msTable);
+        body.append("--sep--\n");
+        body.append(msLog);
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
         headerLines.put("Type", "MEMBERSHIP" );
         headerLines.put("NodeIP", nodeIP);
+        headerLines.put("BodySize", String.valueOf(body.toString().length()));
 
-
-        StringBuilder message = new StringBuilder();
-        message.append(buildHeader(headerLines));
-
-        // BODY
-        var msTable = membershipView.getMembershipTable().toString();
-        var msLog = new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
-        message.append(msTable);
-        message.append("--sep--\n");
-        message.append(msLog);
-
-        return message.toString();
+        return buildHeader(headerLines) + body;
     }
 
     public static MembershipView parseMembershipMessage(MessageBuilder message) {
@@ -147,6 +140,7 @@ public class MessageBuilder {
         Map<String, String> headerLines = new HashMap<>();
         headerLines.put("NodeIP", "CLIENT");
         headerLines.put("Type", op);
+        headerLines.put("BodySize", String.valueOf(arg.length()));
 
         return buildHeader(headerLines) + arg;
     }

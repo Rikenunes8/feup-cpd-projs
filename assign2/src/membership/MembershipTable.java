@@ -29,6 +29,7 @@ public class MembershipTable {
     }
 
     public MembershipInfo getClosestMembershipInfo(String key) {
+        if (this.membershipInfoMap.isEmpty()) return null;
         Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key);
 
         // the key is after the last hashedId in the tree
@@ -55,5 +56,9 @@ public class MembershipTable {
                 this.membershipInfoMap.put(key, aux.get(key));
             }
         }
+    }
+
+    public boolean hasStore(String keyHashed) {
+        return this.membershipInfoMap.containsKey(keyHashed);
     }
 }

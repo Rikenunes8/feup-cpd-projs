@@ -26,6 +26,12 @@ public class DispatcherThread implements Runnable{
                     case "JOIN" -> store.join();
                     case "LEAVE" -> store.leave();
                     case "PUT" -> {
+                        // TODO beta
+                        int c = 0;
+                        while (!this.store.isOnline() && c < 3) {
+                            System.out.println("Not online yet"); Thread.sleep(1000); c++;
+                        }
+                        // TODO -------------
                         String key = header.get("Key");
                         String response = store.put(key, message.getBody());
                         if (key == null || key.equals("null") || key.isEmpty())
@@ -42,7 +48,7 @@ public class DispatcherThread implements Runnable{
                 System.out.println("Invalid Message!");
             }
             this.socket.close();
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }

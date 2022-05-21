@@ -24,21 +24,21 @@ public class FileUtils {
 
     // TODO
     // JAVA NIO -> NON BLOCKING IO
-    public static void saveFile(String hashedID, String key, String value) {
+    public static boolean saveFile(String hashedID, String key, String value) {
         try {
             File keyFile = new File(STORAGE_ROOT + hashedID + "/" + key + ".txt");
 
             if (!keyFile.exists()) {
                 if (!keyFile.createNewFile()) {
                     System.out.println("An error occurred when creating keyFile in node " + hashedID);
-                    return;
+                    return false;
                 }
             }
 
             if (!keyFile.canWrite()) {
                 System.out.println("Permission denied! Can not write value of key "
                         + key + " in node " + hashedID);
-                return;
+                return false;
             }
 
             FileWriter keyFileWriter = new FileWriter(STORAGE_ROOT + hashedID + "/" + key + ".txt", false);
@@ -51,7 +51,9 @@ public class FileUtils {
         } catch (IOException e) {
             System.out.println("An error occurred when saving key-value pair in node " + hashedID);
             e.printStackTrace();
+            return false;
         }
+        return true;
     }
 
     public static String getFile(String hashedID, String key) {
@@ -83,19 +85,20 @@ public class FileUtils {
         }
     }
 
-    public static void deleteFile(String hashedID, String key) {
+    public static boolean deleteFile(String hashedID, String key) {
         File keyFile = new File(STORAGE_ROOT + hashedID + "/" + key + ".txt");
 
         if (!keyFile.exists()) {
             System.out.println("In node " + hashedID + " there doesn't exist any value associated with the key: " + key);
-            return;
+            return true;
         }
 
         if (keyFile.delete()) {
             System.out.println("Successfully deleted key-value pair in node " + hashedID);
-            return;
+            return true;
         }
 
         System.out.println("An error occurred when deleting key-value pair in node " + hashedID);
+        return false;
     }
 }

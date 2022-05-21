@@ -10,6 +10,8 @@ import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.*;
 
 
@@ -20,6 +22,7 @@ public class Store implements IMembership, IService {
     private final int storePort;
     private final String hashedId;
 
+    private Set<String> keys;
     private int membershipCounter;
     private MembershipView membershipView;
 
@@ -31,7 +34,6 @@ public class Store implements IMembership, IService {
     private ExecutorService executorMcast;
     private ScheduledExecutorService executorTimerTask;
 
-    // TODO everything
     public static void main(String[] args) {
         Store store = parseArgs(args);
 
@@ -81,6 +83,7 @@ public class Store implements IMembership, IService {
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
+        this.keys = new HashSet<>();
         this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
@@ -103,6 +106,9 @@ public class Store implements IMembership, IService {
             throw new RuntimeException(e);
         }
     }
+
+
+    // ---------- MEMBERSHIP PROTOCOL -------------
 
     @Override
     public boolean join() {
@@ -144,6 +150,12 @@ public class Store implements IMembership, IService {
 
             endMcastReceiver();
 
+            // TODO beta
+            this.updateMembershipView(this.nodeIP, this.storePort, this.membershipCounter); // Remove itself from view
+            for (String key : this.keys) {
+                this.transferFile(key);
+            }
+
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
@@ -158,7 +170,6 @@ public class Store implements IMembership, IService {
         this.rcvDatagramSocket.bind(new InetSocketAddress(this.mcastPort));
         this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
     }
-
     private void endMcastReceiver() throws InterruptedException, IOException {
         this.executorMcast.shutdown();
         System.out.println("Shutting down...");
@@ -174,9 +185,51 @@ public class Store implements IMembership, IService {
         this.rcvDatagramSocket = null;
     }
 
+    public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        this.membershipView.merge(membershipTable, membershipLog);
+        timerTask();
+    }
+    public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
+        this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
+        timerTask();
+    }
+    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+        this.membershipView.mergeMembershipViews(membershipViews);
+        timerTask();
+    }
+
+    private void timerTask() {
+        // Compare hashedID with the smaller hashedID in the cluster view
+        var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
+        boolean smaller = !infoMap.isEmpty() && hashedId.equals(infoMap.firstKey());
+        System.out.println("Am I the smaller: " + smaller);
+
+        if (this.executorTimerTask == null && smaller) {
+            System.out.println("Alarm setted");
+            this.executorTimerTask = Executors.newScheduledThreadPool(1);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, 10, TimeUnit.SECONDS);
+        }
+        else if (this.executorTimerTask != null && !smaller) {
+            System.out.println("Alarm canceled");
+            // TODO does this work
+            this.executorTimerTask.shutdown();
+            try {
+                this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace(); // TODO
+            }
+            if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
+            this.executorTimerTask = null;
+        }
+    }
+
+    // ---------- END OF MEMBERSHIP PROTOCOL ---------------
+
+
+    // ---------- SERVICE PROTOCOL -------------
+
     @Override
     public String put(String key, String value) {
-        // CALCULATE KEY FROM FILE VALUE
         String keyHashed = (key == null || key.equals("null") || key.isEmpty())
                 ? HashUtils.getHashedSha256(value) : key;
 
@@ -184,7 +237,7 @@ public class Store implements IMembership, IService {
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
 
         if (closestNode.toString().equals(this.getNodeIPPort())) {
-            FileUtils.saveFile(this.hashedId, keyHashed, value);
+            this.saveFile(keyHashed, value);
         } else {
             try {
                 // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
@@ -204,7 +257,7 @@ public class Store implements IMembership, IService {
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
 
         if (closestNode.toString().equals(this.getNodeIPPort())) {
-            return FileUtils.getFile(this.hashedId, key);
+            return this.getFile(key);
         } else {
             // REDIRECT THE GET REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
             try (Socket socket = new Socket(closestNode.getIP(), closestNode.getPort())) {
@@ -225,7 +278,7 @@ public class Store implements IMembership, IService {
         MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
 
         if (closestNode.toString().equals(this.getNodeIPPort())) {
-            FileUtils.deleteFile(this.hashedId, key);
+            this.deleteFile(key);
         } else {
             try {
                 // REDIRECT THE DELETE REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
@@ -237,45 +290,30 @@ public class Store implements IMembership, IService {
         }
     }
 
-    public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        this.membershipView.merge(membershipTable, membershipLog);
-        timerTask();
+    public boolean transferFile(String key) {
+        var value = this.getFile(key);
+        if (value == null) return false;
+        this.put(key, value);
+        this.deleteFile(key);
+        return true;
     }
-
-    public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
-        this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
-        timerTask();
-    }
-    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
-        this.membershipView.mergeMembershipViews(membershipViews);
-        timerTask();
-    }
-
-    private void timerTask() {
-        // Compare hashedID with the smaller hashedID in the cluster view
-        var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
-        boolean smaller = !infoMap.isEmpty() && hashedId.equals(infoMap.firstKey());
-        System.out.println("Am I the smaller: " + smaller);
-
-        if (this.executorTimerTask == null && smaller) {
-            System.out.println("Alarm setted");
-            this.executorTimerTask = Executors.newScheduledThreadPool(1);
-            String msg = MessageBuilder.membershipMessage(this.membershipView, nodeIP);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this, msg), 0, 10, TimeUnit.SECONDS);
-        }
-        else if (this.executorTimerTask != null && !smaller) {
-            System.out.println("Alarm canceled");
-            // TODO does this work
-            this.executorTimerTask.shutdown();
-            try {
-                this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                e.printStackTrace(); // TODO
-            }
-            if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
-            this.executorTimerTask = null;
+    public void saveFile(String key, String value) {
+        if (FileUtils.saveFile(this.hashedId, key, value)) {
+            keys.add(key);
         }
     }
+    public String getFile(String key) {
+        return FileUtils.getFile(this.hashedId, key);
+    }
+    public void deleteFile(String key) {
+        if (FileUtils.deleteFile(this.hashedId, key)) {
+            this.keys.remove(key);
+        }
+    }
+
+    // ---------- END OF SERVICE PROTOCOL ---------------
+
+    // -------------- GETS AND SETS ---------------------
 
     public String getNodeIP() {
         return nodeIP;
@@ -292,6 +330,9 @@ public class Store implements IMembership, IService {
     public int getMcastPort() {
         return mcastPort;
     }
+    public String getHashedId() {
+        return hashedId;
+    }
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
     }
@@ -304,6 +345,12 @@ public class Store implements IMembership, IService {
     public MembershipView getMembershipView() {
         return membershipView;
     }
+    public Set<String> getKeys() {
+        return keys;
+    }
+    public MembershipInfo getClosestMembershipInfo(String keyHashed) {
+        return this.membershipView.getClosestMembershipInfo(keyHashed);
+    }
 
     public void setMembershipView(MembershipView membershipView) {
         this.membershipView = membershipView;
@@ -311,5 +358,9 @@ public class Store implements IMembership, IService {
     public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         this.membershipView.setMembershipTable(membershipTable);
         this.membershipView.setMembershipLog(membershipLog);
+    }
+
+    public boolean isOnline() {
+        return this.membershipView.isOnline(this.hashedId);
     }
 }

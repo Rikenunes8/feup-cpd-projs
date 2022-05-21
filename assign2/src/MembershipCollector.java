@@ -50,11 +50,15 @@ public class MembershipCollector {
         catch (IOException e) {throw new RuntimeException(e);}
 
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
+        System.out.println(store.getMembershipView().getMembershipTable());
+        System.out.println(store.getMembershipView().getMembershipLog());
 
         store.updateMembershipView(store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
         store.mergeMembershipViews(membershipViews);
 
         System.out.println("Membership views synchronized"); // TODO DEBUG
+        System.out.println(store.getMembershipView().getMembershipTable());
+        System.out.println(store.getMembershipView().getMembershipLog());
     }
 
     private static Map.Entry<String, MembershipView> membershipReaderTask(ServerSocket serverSocket) {

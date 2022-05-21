@@ -30,6 +30,10 @@ public class MembershipView {
         return this.membershipTable.getClosestMembershipInfo(keyHashed);
     }
 
+    public boolean isOnline(String keyHashed) {
+        return this.membershipTable.hasStore(keyHashed);
+    }
+
     public void mergeMembershipViews(Map<String, MembershipView> membershipViews) {
         for (var pair : membershipViews.entrySet()) {
             MembershipView view = pair.getValue();

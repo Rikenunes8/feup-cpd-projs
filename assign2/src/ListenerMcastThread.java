@@ -47,10 +47,17 @@ public class ListenerMcastThread implements Runnable {
 
         this.store.updateMembershipView(nodeIP, nodePort, msCounter);
 
-        if (!this.store.getNodeIP().equals(nodeIP)) {
-            String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
-            try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
-            catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
+        if (this.store.getNodeIP().equals(nodeIP)) return;
+
+        String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
+        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
+        catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
+
+        // TODO beta
+        for (String key : this.store.getKeys()) {
+            if (this.store.getClosestMembershipInfo(key).getIP().equals(nodeIP)) {
+                this.store.transferFile(key);
+            }
         }
     }
 
@@ -67,5 +74,4 @@ public class ListenerMcastThread implements Runnable {
         MembershipView view = parseMembershipMessage(message);
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
     }
-
 }
