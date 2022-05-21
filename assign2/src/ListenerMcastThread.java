@@ -7,6 +7,7 @@ import utils.HashUtils;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Random;
 
 import static messages.MessageBuilder.parseMembershipMessage;
 import static messages.MulticastMessager.receiveMcastMessage;
@@ -33,14 +34,14 @@ public class ListenerMcastThread implements Runnable {
                     case "MEMBERSHIP" -> this.membershipHandler(message);
                     default -> System.out.println("Type case not implemented");
                 }
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }
     }
 
 
-    private void joinHandler(Map<String, String> header) {
+    private void joinHandler(Map<String, String> header) throws InterruptedException {
         System.out.println("Received join message from " + header.get("NodeIP"));
         String nodeIP = header.get("NodeIP");
         int msPort    = Integer.parseInt(header.get("MembershipPort"));
@@ -50,6 +51,8 @@ public class ListenerMcastThread implements Runnable {
         this.store.updateMembershipView(nodeIP, nodePort, msCounter);
 
         if (this.store.getNodeIP().equals(nodeIP)) return;
+
+        Thread.sleep(new Random().nextInt(500)); // Wait random time before send membership message
 
         String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
