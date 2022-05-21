@@ -37,8 +37,7 @@ public class Store implements IMembership, IService {
 
         Runtime runtime = Runtime.getRuntime();
         // ExecutorService executor = Executors.newWorkStealingPool(8);
-        ExecutorService executor = Executors.newFixedThreadPool(1);
-        // ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
+        ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
         // according to the number of processors available to the Java virtual machine
 
         while (true) {
