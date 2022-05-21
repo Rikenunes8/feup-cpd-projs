@@ -37,7 +37,7 @@ public class DispatcherThread implements Runnable {
                         if (!canProcess()) return;
                         String key = header.get("Key");
                         String response = this.store.put(key, this.message.getBody());
-                        if (key == null || key.equals("null") || key.isEmpty())
+                        if (key == null || key.equals("null"))
                             TcpMessager.sendMessage(this.socket, response);
                     }
                     case "GET" -> {

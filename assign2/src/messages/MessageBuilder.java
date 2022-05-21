@@ -8,8 +8,6 @@ import java.util.Map;
 import java.util.Scanner;
 
 public class MessageBuilder {
-    static final char CR = 0xD;
-    static final char LF = 0xA;
     static final String PUT = "PUT";
     static final String GET = "GET";
     static final String DEL = "DELETE";
@@ -26,10 +24,11 @@ public class MessageBuilder {
     }
 
     public MessageBuilder(String msg) {
-
+        // TODO
         System.out.println("\n--- MESSAGE ---");
         System.out.println(msg); // DEBUG
         System.out.println("--- END MESSAGE ---\n");
+
         String[] msgArr = msg.split("\n\n", 2);
 
         String header = msgArr[0];

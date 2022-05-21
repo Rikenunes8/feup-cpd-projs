@@ -55,11 +55,6 @@ public class MembershipCollector {
         store.mergeMembershipViews(membershipViews);
 
         System.out.println("Membership views synchronized"); // TODO DEBUG
-
-        // TODO this should be threads doing
-        while (!store.isEmptyPendingQueue()) {
-            store.removeFromPendingQueue().processMessage();
-        }
     }
 
     private static Map.Entry<String, MembershipView> membershipReaderTask(ServerSocket serverSocket) {

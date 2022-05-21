@@ -16,6 +16,7 @@ import java.util.concurrent.*;
 
 
 public class Store implements IMembership, IService {
+    private static final int ALARM_PERIOD = 10;
     private final InetAddress mcastAddr;
     private final int mcastPort;
     private final String nodeIP;
@@ -24,8 +25,8 @@ public class Store implements IMembership, IService {
 
     private final Set<String> keys;
     private int membershipCounter;
-    private MembershipView membershipView;
-    private ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
+    private final MembershipView membershipView;
+    private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -38,9 +39,8 @@ public class Store implements IMembership, IService {
     public static void main(String[] args) {
         Store store = parseArgs(args);
 
-        Runtime runtime = Runtime.getRuntime();
         // ExecutorService executor = Executors.newWorkStealingPool(8);
-        ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
         // according to the number of processors available to the Java virtual machine
 
         while (true) {
@@ -48,8 +48,7 @@ public class Store implements IMembership, IService {
                 Socket socket = serverSocket.accept();
                 System.out.println("Main connection accepted");
 
-                Runnable work = new DispatcherThread(socket, store);
-                executor.execute(work);
+                executor.execute(new DispatcherThread(socket, store));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -89,11 +88,10 @@ public class Store implements IMembership, IService {
         this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
-        String networkInterfaceStr = "loopback"; // TODO
-
         this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
-        System.out.println("HashID: " + hashedId);
+        System.out.println("HashID: " + hashedId); // TODO DEBUG
 
+        String networkInterfaceStr = "loopback"; // TODO
         try {
             this.sndDatagramSocket = new DatagramSocket();
             this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
@@ -123,13 +121,14 @@ public class Store implements IMembership, IService {
             this.membershipCounter++;
 
             this.executorMcast = Executors.newWorkStealingPool(2);
-            // this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
 
             FileUtils.createDirectory(this.hashedId);
-
+            while (!this.isEmptyPendingQueue()) {
+                this.removeFromPendingQueue().processMessage();
+            }
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
@@ -152,13 +151,10 @@ public class Store implements IMembership, IService {
 
             endMcastReceiver();
 
-            // TODO beta
-            // this.updateMembershipView(this.nodeIP, this.storePort, this.membershipCounter); // Remove itself from view
             var keysCopy = new HashSet<String>(this.keys);
             for (String key : keysCopy) {
                 this.transferFile(key);
             }
-
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
@@ -177,12 +173,9 @@ public class Store implements IMembership, IService {
         this.executorMcast.shutdown();
         System.out.println("Shutting down...");
         executorMcast.awaitTermination(1, TimeUnit.SECONDS);
-        System.out.println("Wait enough");
-        if (!executorMcast.isTerminated()) {
-            System.out.println("Forcing shutdown");
-            executorMcast.shutdownNow();
-            System.out.println("Shutdown complete");
-        }
+        if (!executorMcast.isTerminated()) executorMcast.shutdownNow();
+
+        System.out.println("Shutdown complete");
 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
@@ -210,17 +203,14 @@ public class Store implements IMembership, IService {
         if (this.executorTimerTask == null && smaller) {
             System.out.println("Alarm setted");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, 10, TimeUnit.SECONDS);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.SECONDS);
         }
         else if (this.executorTimerTask != null && !smaller) {
             System.out.println("Alarm canceled");
-            // TODO does this work
             this.executorTimerTask.shutdown();
-            try {
-                this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                e.printStackTrace(); // TODO
-            }
+            try { this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);}
+            catch (InterruptedException e) { e.printStackTrace(); } // TODO
+
             if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
             this.executorTimerTask = null;
         }
@@ -233,7 +223,7 @@ public class Store implements IMembership, IService {
 
     @Override
     public String put(String key, String value) {
-        String keyHashed = (key == null || key.equals("null") || key.isEmpty())
+        String keyHashed = (key == null || key.equals("null"))
                 ? HashUtils.getHashedSha256(value) : key;
 
         // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY
