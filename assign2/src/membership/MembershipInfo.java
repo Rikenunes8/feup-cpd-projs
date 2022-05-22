@@ -18,16 +18,14 @@ public class MembershipInfo {
     public String getIP() {
         return this.ip;
     }
-
     public int getPort() {
         return this.port;
     }
 
-    public static String getIPFromString(String rec){
+    private static String getIPFromString(String rec){
         return rec.split(":")[0].trim();
     }
-
-    public static int getPortFromString(String rec){
+    private static int getPortFromString(String rec){
         return Integer.parseInt(rec.split(":")[1].trim());
     }
 

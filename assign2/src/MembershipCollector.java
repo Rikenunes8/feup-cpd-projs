@@ -11,7 +11,7 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static messages.MessageBuilder.joinLeaveMessage;
+import static messages.MessageBuilder.joinMessage;
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class MembershipCollector {
@@ -24,7 +24,7 @@ public class MembershipCollector {
         System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
-        String msg = joinLeaveMessage(store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
+        String msg = joinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
 
         boolean send = true;
         int attempts = 0;
@@ -50,7 +50,7 @@ public class MembershipCollector {
 
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
-        store.updateMembershipView(store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
         store.mergeMembershipViews(membershipViews);
 
         System.out.println("Membership views synchronized"); // TODO DEBUG
@@ -65,7 +65,7 @@ public class MembershipCollector {
             String msg = TcpMessager.receiveMessage(socket);
 
             MessageBuilder message = new MessageBuilder(msg);
-            String id = message.getHeader().get("NodeIP");
+            String id = message.getHeader().get("NodeID");
             MembershipView membershipView = MessageBuilder.parseMembershipMessage(message);
 
             socket.close();

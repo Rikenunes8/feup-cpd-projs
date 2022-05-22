@@ -37,11 +37,11 @@ public class TestClient {
         switch (operation) {
             case "join" -> {
                 System.out.println("perform join operation nodeAC = " + nodeAC);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.clientMessage("JOIN", ""));
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.simpleMessage("JOIN", ""));
             }
             case "leave" ->{
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.clientMessage("LEAVE", ""));
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.simpleMessage("LEAVE", ""));
             }
             case "put" -> {
                 if (args.length != 3) {
@@ -57,7 +57,6 @@ public class TestClient {
                 if (key == null) break;
                 
                 TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("PUT", key, value));
-                // String key = TcpMessager.receiveMessage(socket);
                 System.out.println(key);
             }
             case "get" -> {

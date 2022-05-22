@@ -1,31 +1,29 @@
 package membership;
 
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MembershipLogRecord {
-    private final String nodeIP;
+    private final String nodeID;
     private final int counter;
 
-    public MembershipLogRecord(String nodeIP, int counter) {
-        this.nodeIP = nodeIP;
+    public MembershipLogRecord(String nodeID, int counter) {
+        this.nodeID = nodeID;
         this.counter = counter;
     }
-    public MembershipLogRecord(String ipAndCounter) {
-        this.nodeIP = getIPFromString(ipAndCounter);
-        this.counter = getCounterFromString(ipAndCounter);
+    public MembershipLogRecord(String counterAndId) {
+        this.nodeID = getIDFromString(counterAndId);
+        this.counter = getCounterFromString(counterAndId);
     }
 
-    private static String getIPFromString(String rec) {
-        return rec.split("\\|")[0].trim();
+    private static String getIDFromString(String rec) {
+        return rec.split("\\|")[1].trim();
     }
     private static int getCounterFromString(String rec) {
-        return Integer.parseInt(rec.split("\\|")[1].trim());
+        return Integer.parseInt(rec.split("\\|")[0].trim());
     }
 
-    public String getNodeIP() {
-        return nodeIP;
+    public String getNodeID() {
+        return nodeID;
     }
     public int getCounter() {
         return counter;
@@ -33,7 +31,7 @@ public class MembershipLogRecord {
 
     @Override
     public String toString(){
-        return nodeIP + "|" + counter;
+        return counter + "|" + nodeID;
     }
 
     @Override
@@ -41,11 +39,11 @@ public class MembershipLogRecord {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         MembershipLogRecord that = (MembershipLogRecord) o;
-        return counter == that.counter && Objects.equals(nodeIP, that.nodeIP);
+        return counter == that.counter && Objects.equals(nodeID, that.nodeID);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(nodeIP, counter);
+        return Objects.hash(nodeID, counter);
     }
 }

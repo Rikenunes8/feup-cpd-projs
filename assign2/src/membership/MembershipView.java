@@ -1,7 +1,5 @@
 package membership;
 
-import utils.HashUtils;
-
 import java.util.Map;
 
 public class MembershipView {
@@ -34,7 +32,7 @@ public class MembershipView {
     }
 
     public boolean isOnline(String keyHashed) {
-        return this.membershipTable.hasStore(keyHashed);
+        return this.membershipTable.getMembershipInfoMap().containsKey(keyHashed);
     }
 
     public void mergeMembershipViews(Map<String, MembershipView> membershipViews) {
@@ -52,20 +50,19 @@ public class MembershipView {
 
     public void synchronizeTable() {
         for (var log : this.membershipLog.getLogs()) {
-            if (log.getCounter() % 2 == 0) continue; // TODO if a node was supposed to be in cluster do something
-            Map<String, String> invTable = this.membershipTable.getMembershipInfoList();
-            if (invTable.containsKey(log.getNodeIP())) {
-                this.membershipTable.removeMembershipInfo(invTable.get(log.getNodeIP()));
+            if (log.getCounter() % 2 == 0) continue; // TODO if a node was supposed to be in cluster should do something
+            if (this.membershipTable.getMembershipInfoMap().containsKey(log.getNodeID())) {
+                this.membershipTable.removeMembershipInfo(log.getNodeID());
             }
         }
     }
 
-    public void updateMembershipInfo(String nodeIP, int port, int membershipCounter) {
+    public void updateMembershipInfo(String id, String ip, int port, int membershipCounter) {
         if (membershipCounter % 2 == 0)
-            this.membershipTable.addMembershipInfo(HashUtils.getHashedSha256(HashUtils.joinIpPort(nodeIP, port)), new MembershipInfo(nodeIP, port));
+            this.membershipTable.addMembershipInfo(id, new MembershipInfo(ip, port));
         else
-            this.membershipTable.removeMembershipInfo(HashUtils.getHashedSha256(HashUtils.joinIpPort(nodeIP, port)));
+            this.membershipTable.removeMembershipInfo(id);
 
-        this.membershipLog.addMembershipInfo(new MembershipLogRecord(nodeIP, membershipCounter));
+        this.membershipLog.addMembershipInfo(new MembershipLogRecord(id, membershipCounter));
     }
 }

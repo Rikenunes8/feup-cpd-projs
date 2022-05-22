@@ -17,7 +17,7 @@ public class AlarmThread implements Runnable{
     @Override
     public void run() {
         System.out.println("Sending alarm");
-        String msg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
+        String msg = MessageBuilder.membershipMessage(this.store.getNodeIP(), this.store.getMembershipView());
         try {
             sendMcastMessage(msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());
         } catch (IOException e) {

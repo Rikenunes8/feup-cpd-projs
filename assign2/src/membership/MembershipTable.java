@@ -1,7 +1,6 @@
 package membership;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class MembershipTable {
 
@@ -11,17 +10,12 @@ public class MembershipTable {
         this.membershipInfoMap = new TreeMap<>();
     }
 
-    public void addMembershipInfo(String hashedId, MembershipInfo mInfo) {
-        this.membershipInfoMap.put(hashedId, mInfo);
+    public void addMembershipInfo(String id, MembershipInfo msInfo) {
+        this.membershipInfoMap.put(id, msInfo);
     }
 
-
-    public void removeMembershipInfo(String hashedId) {
-        this.membershipInfoMap.remove(hashedId);
-    }
-
-    public Map<String, String> getMembershipInfoList() {
-        return this.membershipInfoMap.entrySet().stream().collect(Collectors.toMap(entry -> entry.getValue().getIP(), Map.Entry::getKey));
+    public void removeMembershipInfo(String id) {
+        this.membershipInfoMap.remove(id);
     }
 
     public TreeMap<String, MembershipInfo> getMembershipInfoMap() {
@@ -30,7 +24,7 @@ public class MembershipTable {
 
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String key) {
         if (this.membershipInfoMap.isEmpty()) return null;
-        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key);
+        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key); // Binary Search to find the closest node
 
         // the key is after the last hashedId in the tree
         return (closestNode == null)
@@ -48,16 +42,6 @@ public class MembershipTable {
                 : closestNode;
     }
 
-    @Override
-    public String toString(){
-        StringBuilder ret = new StringBuilder();
-        for (MembershipInfo entry : this.membershipInfoMap.values()){
-            ret.append(entry.toString());
-            ret.append("\n");
-        }
-        return ret.toString();
-    }
-
     public void mergeTable(MembershipTable membershipTable) {
         var aux = membershipTable.getMembershipInfoMap();
         for (var key : aux.keySet()) {
@@ -67,7 +51,14 @@ public class MembershipTable {
         }
     }
 
-    public boolean hasStore(String keyHashed) {
-        return this.membershipInfoMap.containsKey(keyHashed);
+    @Override
+    public String toString(){
+        StringBuilder ret = new StringBuilder();
+        for (var key : this.membershipInfoMap.keySet()){
+            ret.append(key).append(":");
+            ret.append(this.membershipInfoMap.get(key).toString());
+            ret.append("\n");
+        }
+        return ret.toString();
     }
 }

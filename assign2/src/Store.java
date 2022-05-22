@@ -1,6 +1,6 @@
 import membership.*;
 
-import static messages.MessageBuilder.joinLeaveMessage;
+import static messages.MessageBuilder.leaveMessage;
 import static messages.MulticastMessager.*;
 
 import messages.MessageBuilder;
@@ -22,7 +22,7 @@ public class Store implements IMembership, IService {
     private final int mcastPort;
     private final String nodeIP;
     private final int storePort;
-    private final String hashedId;
+    private final String id;
 
     private final Set<String> keys;
     private int membershipCounter;
@@ -89,9 +89,9 @@ public class Store implements IMembership, IService {
         this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
-        this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
-        System.out.println("HashID: " + hashedId); // TODO DEBUG
-        FileUtils.createDirectory(this.hashedId);
+        this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
+        System.out.println("ID: " + id); // TODO DEBUG
+        FileUtils.createDirectory(this.id);
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -147,7 +147,7 @@ public class Store implements IMembership, IService {
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-            String msg = joinLeaveMessage(this.nodeIP, this.storePort, this.membershipCounter, 0);
+            String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
@@ -186,8 +186,8 @@ public class Store implements IMembership, IService {
         this.membershipView.merge(membershipTable, membershipLog);
         timerTask();
     }
-    public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
-        this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
+    public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
+        this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
         timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
@@ -198,7 +198,7 @@ public class Store implements IMembership, IService {
     private void timerTask() {
         // Compare hashedID with the smaller hashedID in the cluster view
         var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
-        boolean smaller = !infoMap.isEmpty() && hashedId.equals(infoMap.firstKey());
+        boolean smaller = !infoMap.isEmpty() && id.equals(infoMap.firstKey());
         System.out.println("Am I the smaller: " + smaller);
 
         if (this.executorTimerTask == null && smaller) {
@@ -224,8 +224,6 @@ public class Store implements IMembership, IService {
 
     @Override
     public void put(String key, String value) {
-        // String keyHashed = (key == null || key.equals("null")) ? HashUtils.getHashedSha256(value) : key;
-
         // In order to discard duplicated requests
         if (this.keys.contains(key)) return;
 
@@ -233,14 +231,14 @@ public class Store implements IMembership, IService {
         Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
         Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
 
-        if (closestEntry.getKey().equals(this.hashedId)) {
+        if (closestEntry.getKey().equals(this.id)) {
             this.saveFile(key, value);
 
             // the closest node of the key is the one responsible for the coordination of the replication
             for (var nextKey : replicationEntries.keySet())
                 this.redirectService(replicationEntries.get(nextKey), MessageBuilder.storeMessage("PUT", key, value));
         } else {
-            if (replicationEntries.containsKey(this.hashedId)) this.saveFile(key, value);
+            if (replicationEntries.containsKey(this.id)) this.saveFile(key, value);
             this.redirectService(closestEntry.getValue(), MessageBuilder.storeMessage("PUT", key, value));
         }
     }
@@ -277,7 +275,7 @@ public class Store implements IMembership, IService {
         Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
         Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
 
-        if (closestEntry.getKey().equals(this.hashedId)) {
+        if (closestEntry.getKey().equals(this.id)) {
             // In order to discard duplicated requests
             if (!this.keys.contains(key)) return;
             this.deleteFile(key);
@@ -286,7 +284,7 @@ public class Store implements IMembership, IService {
             for (var nextKey : replicationEntries.keySet())
                 this.redirectService(replicationEntries.get(nextKey), MessageBuilder.storeMessage("DELETE", key));
         } else {
-            if (replicationEntries.containsKey(this.hashedId)) this.deleteFile(key);
+            if (replicationEntries.containsKey(this.id)) this.deleteFile(key);
             this.redirectService(closestEntry.getValue(), MessageBuilder.storeMessage("DELETE", key));
         }
     }
@@ -310,22 +308,23 @@ public class Store implements IMembership, IService {
         this.deleteFile(key);
         return true;
     }
-    public boolean copyFile(String key, MembershipInfo membershipInfo) {
+    public boolean copyFile(String key, String nodeID) {
+        var membershipInfo =  this.getMembershipView().getMembershipTable().getMembershipInfoMap().get(nodeID);
         var value = this.getFile(key);
         if (value == null) return false;
         this.redirectService(membershipInfo, MessageBuilder.storeMessage("PUT", key, value));
         return true;
     }
     public void saveFile(String key, String value) {
-        if (FileUtils.saveFile(this.hashedId, key, value)) {
+        if (FileUtils.saveFile(this.id, key, value)) {
             this.keys.add(key);
         }
     }
     public String getFile(String key) {
-        return FileUtils.getFile(this.hashedId, key);
+        return FileUtils.getFile(this.id, key);
     }
     public void deleteFile(String key) {
-        if (FileUtils.deleteFile(this.hashedId, key)) {
+        if (FileUtils.deleteFile(this.id, key)) {
             this.keys.remove(key);
         }
     }
@@ -362,11 +361,11 @@ public class Store implements IMembership, IService {
     public int getStorePort() {
         return this.storePort;
     }
-    public String getNodeIPPort() {
-        return HashUtils.joinIpPort(this.nodeIP, this.storePort);
+    private String getNodeIPPort() {
+        return this.nodeIP + ":" + this.storePort;
     }
-    public String getHashedId() {
-        return this.hashedId;
+    public String getId() {
+        return this.id;
     }
     public InetAddress getMcastAddr() {
         return mcastAddr;
@@ -415,6 +414,6 @@ public class Store implements IMembership, IService {
     }
 
     public boolean isOnline() {
-        return this.membershipView.isOnline(this.hashedId);
+        return this.membershipView.isOnline(this.id);
     }
 }

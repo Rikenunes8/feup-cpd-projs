@@ -1,9 +1,7 @@
 
-import membership.MembershipInfo;
 import membership.MembershipView;
 import messages.MessageBuilder;
 import messages.TcpMessager;
-import utils.HashUtils;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -14,6 +12,7 @@ import static messages.MessageBuilder.parseMembershipMessage;
 import static messages.MulticastMessager.receiveMcastMessage;
 
 public class ListenerMcastThread implements Runnable {
+    private final int MAX_WAIT = 500;
     private final Store store;
 
     public ListenerMcastThread(Store store) {
@@ -44,26 +43,45 @@ public class ListenerMcastThread implements Runnable {
 
     private void joinHandler(Map<String, String> header) throws InterruptedException {
         System.out.println("Received join message from " + header.get("NodeIP"));
+        String nodeID = header.get("NodeID");
         String nodeIP = header.get("NodeIP");
+        int storePort = Integer.parseInt(header.get("StorePort"));
         int msPort    = Integer.parseInt(header.get("MembershipPort"));
-        int nodePort  = Integer.parseInt(header.get("Port"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
-        String newNodeHashedId = HashUtils.getHashedSha256(HashUtils.joinIpPort(nodeIP, nodePort));
 
-        this.store.updateMembershipView(nodeIP, nodePort, msCounter);
+        this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
 
-        if (this.store.getNodeIP().equals(nodeIP)) return;
+        if (this.store.getId().equals(nodeID)) return;
 
-        Thread.sleep(new Random().nextInt(500)); // Wait random time before send membership message
+        Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
-        String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
+        String msMsg = MessageBuilder.membershipMessage(this.store.getId(), this.store.getMembershipView());
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
         catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
 
+        transferOwnership(nodeID);
+    }
+
+    private void leaveHandler(Map<String, String> header) {
+        System.out.println("Received leave message from " + header.get("NodeIP"));
+        String nodeID = header.get("NodeID");
+        String nodeIP = header.get("NodeIP");
+        int storePort = Integer.parseInt(header.get("StorePort"));
+        int msCounter = Integer.parseInt(header.get("MembershipCounter"));
+        this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
+    }
+
+    private void membershipHandler(MessageBuilder message) {
+        System.out.println("Multicast Membership Message received");
+        MembershipView view = parseMembershipMessage(message);
+        this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
+    }
+
+    private void transferOwnership(String nodeID) {
         var keysCopy = new HashSet<>(this.store.getKeys());
 
         if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
-            keysCopy.forEach(key -> this.store.copyFile(key, new MembershipInfo(nodeIP, nodePort)));
+            keysCopy.forEach(key -> this.store.copyFile(key, nodeID));
             return;
         }
 
@@ -72,7 +90,7 @@ public class ListenerMcastThread implements Runnable {
             var replications = this.store.getReplicationEntries(closestEntry);
             replications.put(closestEntry.getKey(), closestEntry.getValue());
 
-            if (!replications.containsKey(newNodeHashedId) || replications.containsKey(this.store.getHashedId()))
+            if (!replications.containsKey(nodeID) || replications.containsKey(this.store.getId()))
                 continue;
 
             var next = closestEntry;
@@ -80,21 +98,8 @@ public class ListenerMcastThread implements Runnable {
                 next = this.store.getNextClosestMembershipInfo(next.getKey());
             }
 
-            if (next.getKey().equals(this.store.getHashedId())) this.store.transferFile(key);
+            if (next.getKey().equals(this.store.getId())) this.store.transferFile(key);
         }
     }
 
-    private void leaveHandler(Map<String, String> header) {
-        System.out.println("Received leave message from " + header.get("NodeIP"));
-        String nodeIP = header.get("NodeIP");
-        int nodePort  = Integer.parseInt(header.get("Port"));
-        int msCounter = Integer.parseInt(header.get("MembershipCounter"));
-        this.store.updateMembershipView(nodeIP, nodePort, msCounter);
-    }
-
-    private void membershipHandler(MessageBuilder message) {
-        System.out.println("Multicast Membership Message received");
-        MembershipView view = parseMembershipMessage(message);
-        this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
-    }
 }
