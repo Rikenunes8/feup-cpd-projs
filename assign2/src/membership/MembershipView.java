@@ -26,8 +26,11 @@ public class MembershipView {
         this.membershipLog = membershipLog;
     }
 
-    public MembershipInfo getClosestMembershipInfo(String keyHashed) {
+    public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipTable.getClosestMembershipInfo(keyHashed);
+    }
+    public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
+        return this.membershipTable.getNextClosestMembershipInfo(keyHashed);
     }
 
     public boolean isOnline(String keyHashed) {

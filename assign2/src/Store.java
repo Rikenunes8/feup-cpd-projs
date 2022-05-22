@@ -10,14 +10,13 @@ import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 
 
 public class Store implements IMembership, IService {
     private static final int ALARM_PERIOD = 10;
-    private static final int REPLICATION = 3;
+    private static final int REPLICATION_FACTOR = 3;
 
     private final InetAddress mcastAddr;
     private final int mcastPort;
@@ -227,12 +226,39 @@ public class Store implements IMembership, IService {
     public void put(String key, String value) {
         // String keyHashed = (key == null || key.equals("null")) ? HashUtils.getHashedSha256(value) : key;
 
-        // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY
-        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
+        // In order to discard duplicated requests
+        if (this.keys.contains(key)) return;
 
-        if (closestNode.toString().equals(this.getNodeIPPort())) {
+        // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY AND IN THE X AFTER
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        Map<String, MembershipInfo> replicationEntries = new HashMap<>();
+
+        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
+        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
+            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
+            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
+            replicationEntries.put(lastEntry.getKey(), lastEntry.getValue());
+        }
+
+        if (closestEntry.getKey().equals(this.hashedId)) {
+            // the closest node of the key is the one responsible for the coordination of the replication
             this.saveFile(key, value);
+
+            for (var nextKey : replicationEntries.keySet()) {
+                MembershipInfo replicationNode = replicationEntries.get(nextKey);
+                try {
+                    String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
+                    TcpMessager.sendMessage(replicationNode.getIP(), replicationNode.getPort(), requestMessage);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         } else {
+            if (replicationEntries.containsKey(this.hashedId)) {
+                this.saveFile(key, value);
+            }
+
+            MembershipInfo closestNode = closestEntry.getValue();
             try {
                 // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
                 String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
@@ -246,7 +272,7 @@ public class Store implements IMembership, IService {
     @Override
     public String get(String key) {
         // File (that was requested the content from) is stored in the closest node of the key
-        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
+        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key).getValue();
 
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             return this.getFile(key);
@@ -267,7 +293,7 @@ public class Store implements IMembership, IService {
     @Override
     public void delete(String key) {
         // File (that was requested to be deleted) is stored in the closest node of the key
-        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
+        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key).getValue();
 
         if (closestNode.toString().equals(this.getNodeIPPort())) {
             this.deleteFile(key);
@@ -338,7 +364,7 @@ public class Store implements IMembership, IService {
         return keys;
     }
     public MembershipInfo getClosestMembershipInfo(String keyHashed) {
-        return this.membershipView.getClosestMembershipInfo(keyHashed);
+        return this.membershipView.getClosestMembershipInfo(keyHashed).getValue();
     }
 
     public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
