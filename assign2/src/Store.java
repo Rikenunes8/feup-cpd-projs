@@ -16,7 +16,7 @@ import java.util.concurrent.*;
 
 public class Store implements IMembership, IService {
     private static final int ALARM_PERIOD = 10;
-    private static final int REPLICATION_FACTOR = 3;
+    public static final int REPLICATION_FACTOR = 3;
 
     private final InetAddress mcastAddr;
     private final int mcastPort;
@@ -91,6 +91,7 @@ public class Store implements IMembership, IService {
 
         this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
         System.out.println("HashID: " + hashedId); // TODO DEBUG
+        FileUtils.createDirectory(this.hashedId);
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -126,7 +127,6 @@ public class Store implements IMembership, IService {
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
 
-            FileUtils.createDirectory(this.hashedId);
             while (!this.isEmptyPendingQueue()) {
                 this.removeFromPendingQueue().processMessage();
             }
@@ -289,8 +289,26 @@ public class Store implements IMembership, IService {
     public boolean transferFile(String key) {
         var value = this.getFile(key);
         if (value == null) return false;
-        this.put(key, value);
+
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        if (closestEntry == null) {
+            this.deleteFile(key);
+            return true;
+        }
+
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+        // TODO think of a better way to reduce the number of messages exchange
+        String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
+        this.redirectService(closestEntry.getValue(), requestMessage);
+        for (var nextKey : replicationEntries.keySet())
+            this.redirectService(replicationEntries.get(nextKey), requestMessage);
         this.deleteFile(key);
+        return true;
+    }
+    public boolean copyFile(String key, MembershipInfo membershipInfo) {
+        var value = this.getFile(key);
+        if (value == null) return false;
+        this.redirectService(membershipInfo, MessageBuilder.storeMessage("PUT", key, value));
         return true;
     }
     public void saveFile(String key, String value) {
@@ -315,10 +333,11 @@ public class Store implements IMembership, IService {
         }
     }
 
-    private Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
+    public Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
         Map<String, MembershipInfo> replicationEntries = new HashMap<>();
 
         Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
+        if (lastEntry == null) return replicationEntries;
         for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
             lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
             if (lastEntry.getKey().equals(closestEntry.getKey())) break;
@@ -341,6 +360,9 @@ public class Store implements IMembership, IService {
     public String getNodeIPPort() {
         return HashUtils.joinIpPort(this.nodeIP, this.storePort);
     }
+    public String getHashedId() {
+        return this.hashedId;
+    }
     public InetAddress getMcastAddr() {
         return mcastAddr;
     }
@@ -362,8 +384,14 @@ public class Store implements IMembership, IService {
     public Set<String> getKeys() {
         return keys;
     }
-    public MembershipInfo getClosestMembershipInfo(String keyHashed) {
-        return this.membershipView.getClosestMembershipInfo(keyHashed).getValue();
+    public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
+        return this.membershipView.getClosestMembershipInfo(keyHashed);
+    }
+    public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
+        return this.membershipView.getNextClosestMembershipInfo(keyHashed);
+    }
+    public int getClusterSize() {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
     }
 
     public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {

@@ -1,4 +1,5 @@
 
+import membership.MembershipInfo;
 import membership.MembershipView;
 import messages.MessageBuilder;
 import messages.TcpMessager;
@@ -47,6 +48,7 @@ public class ListenerMcastThread implements Runnable {
         int msPort    = Integer.parseInt(header.get("MembershipPort"));
         int nodePort  = Integer.parseInt(header.get("Port"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
+        String newNodeHashedId = HashUtils.getHashedSha256(HashUtils.joinIpPort(nodeIP, nodePort));
 
         this.store.updateMembershipView(nodeIP, nodePort, msCounter);
 
@@ -59,10 +61,26 @@ public class ListenerMcastThread implements Runnable {
         catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
 
         var keysCopy = new HashSet<>(this.store.getKeys());
+
+        if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
+            keysCopy.forEach(key -> this.store.copyFile(key, new MembershipInfo(nodeIP, nodePort)));
+            return;
+        }
+
         for (String key : keysCopy) {
-            if (this.store.getClosestMembershipInfo(key).toString().equals(HashUtils.joinIpPort(nodeIP, nodePort))) {
-                this.store.transferFile(key);
+            var closestEntry = this.store.getClosestMembershipInfo(key);
+            var replications = this.store.getReplicationEntries(closestEntry);
+            replications.put(closestEntry.getKey(), closestEntry.getValue());
+
+            if (!replications.containsKey(newNodeHashedId) || replications.containsKey(this.store.getHashedId()))
+                continue;
+
+            var next = closestEntry;
+            for (int i = 0; i < Store.REPLICATION_FACTOR; i++) {
+                next = this.store.getNextClosestMembershipInfo(next.getKey());
             }
+
+            if (next.getKey().equals(this.store.getHashedId())) this.store.transferFile(key);
         }
     }
 
