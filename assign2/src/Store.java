@@ -229,43 +229,19 @@ public class Store implements IMembership, IService {
         // In order to discard duplicated requests
         if (this.keys.contains(key)) return;
 
-        // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY AND IN THE X AFTER
+        // File is stored in the closest node of the key and its replicas
         Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = new HashMap<>();
-
-        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
-        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
-            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
-            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
-            replicationEntries.put(lastEntry.getKey(), lastEntry.getValue());
-        }
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
 
         if (closestEntry.getKey().equals(this.hashedId)) {
-            // the closest node of the key is the one responsible for the coordination of the replication
             this.saveFile(key, value);
 
-            for (var nextKey : replicationEntries.keySet()) {
-                MembershipInfo replicationNode = replicationEntries.get(nextKey);
-                try {
-                    String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
-                    TcpMessager.sendMessage(replicationNode.getIP(), replicationNode.getPort(), requestMessage);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+            // the closest node of the key is the one responsible for the coordination of the replication
+            for (var nextKey : replicationEntries.keySet())
+                this.redirectService(replicationEntries.get(nextKey), MessageBuilder.storeMessage("PUT", key, value));
         } else {
-            if (replicationEntries.containsKey(this.hashedId)) {
-                this.saveFile(key, value);
-            }
-
-            MembershipInfo closestNode = closestEntry.getValue();
-            try {
-                // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-                String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
-                TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), requestMessage);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            if (replicationEntries.containsKey(this.hashedId)) this.saveFile(key, value);
+            this.redirectService(closestEntry.getValue(), MessageBuilder.storeMessage("PUT", key, value));
         }
     }
 
@@ -292,19 +268,21 @@ public class Store implements IMembership, IService {
 
     @Override
     public void delete(String key) {
-        // File (that was requested to be deleted) is stored in the closest node of the key
-        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key).getValue();
+        // File (that was requested to be deleted) is stored in the closest node of the key and its replicas
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
 
-        if (closestNode.toString().equals(this.getNodeIPPort())) {
+        if (closestEntry.getKey().equals(this.hashedId)) {
+            // In order to discard duplicated requests
+            if (!this.keys.contains(key)) return;
             this.deleteFile(key);
+
+            // the closest node of the key is the one responsible for the coordination of the replication
+            for (var nextKey : replicationEntries.keySet())
+                this.redirectService(replicationEntries.get(nextKey), MessageBuilder.storeMessage("DELETE", key));
         } else {
-            try {
-                // REDIRECT THE DELETE REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-                String message = MessageBuilder.storeMessage("DELETE", key);
-                TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), message);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            if (replicationEntries.containsKey(this.hashedId)) this.deleteFile(key);
+            this.redirectService(closestEntry.getValue(), MessageBuilder.storeMessage("DELETE", key));
         }
     }
 
@@ -327,6 +305,27 @@ public class Store implements IMembership, IService {
         if (FileUtils.deleteFile(this.hashedId, key)) {
             this.keys.remove(key);
         }
+    }
+
+    public void redirectService(MembershipInfo node, String requestMessage) {
+        try {
+            TcpMessager.sendMessage(node.getIP(), node.getPort(), requestMessage);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
+        Map<String, MembershipInfo> replicationEntries = new HashMap<>();
+
+        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
+        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
+            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
+            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
+            replicationEntries.put(lastEntry.getKey(), lastEntry.getValue());
+        }
+
+        return replicationEntries;
     }
 
     // ---------- END OF SERVICE PROTOCOL ---------------
