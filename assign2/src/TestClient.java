@@ -1,5 +1,6 @@
 import messages.MessageBuilder;
 import messages.TcpMessager;
+import utils.HashUtils;
 
 import java.io.*;
 import java.net.Socket;
@@ -49,13 +50,15 @@ public class TestClient {
                 }
                 String filename = args[2];
                 System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
-                String value = readFile(filename);
 
-                try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.storeMessage("PUT", null, value));
-                    String key = TcpMessager.receiveMessage(socket);
-                    System.out.println(key);
-                }
+                String value = readFile(filename);
+                if (value == null) break;
+                String key = HashUtils.getHashedSha256(value);
+                if (key == null) break;
+                
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("PUT", key, value));
+                // String key = TcpMessager.receiveMessage(socket);
+                System.out.println(key);
             }
             case "get" -> {
                 if (args.length != 3) {

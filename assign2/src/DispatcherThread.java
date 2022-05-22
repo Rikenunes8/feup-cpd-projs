@@ -35,10 +35,11 @@ public class DispatcherThread implements Runnable {
                     case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
                         if (!canProcess()) return;
-                        String key = header.get("Key");
-                        String response = this.store.put(key, this.message.getBody());
-                        if (key == null || key.equals("null"))
-                            TcpMessager.sendMessage(this.socket, response);
+                        this.store.put(header.get("Key"), this.message.getBody());
+                        // String key = header.get("Key");
+                        // String response = this.store.put(key, this.message.getBody());
+                        // if (key == null || key.equals("null"))
+                        //    TcpMessager.sendMessage(this.socket, response);
                     }
                     case "GET" -> {
                         if (!canProcess()) return;

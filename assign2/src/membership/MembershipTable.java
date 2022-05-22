@@ -39,6 +39,15 @@ public class MembershipTable {
                 : closestNode.getValue();
     }
 
+    public MembershipInfo getNextClosestMembershipInfo(String nodeKey) {
+        if (this.membershipInfoMap.isEmpty()) return null;
+        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.higherEntry(nodeKey);
+
+        return (closestNode == null)
+                ? this.membershipInfoMap.firstEntry().getValue()
+                : closestNode.getValue();
+    }
+
     @Override
     public String toString(){
         StringBuilder ret = new StringBuilder();

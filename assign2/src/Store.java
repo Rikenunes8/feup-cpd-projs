@@ -17,6 +17,8 @@ import java.util.concurrent.*;
 
 public class Store implements IMembership, IService {
     private static final int ALARM_PERIOD = 10;
+    private static final int REPLICATION = 3;
+
     private final InetAddress mcastAddr;
     private final int mcastPort;
     private final String nodeIP;
@@ -222,26 +224,23 @@ public class Store implements IMembership, IService {
     // ---------- SERVICE PROTOCOL -------------
 
     @Override
-    public String put(String key, String value) {
-        String keyHashed = (key == null || key.equals("null"))
-                ? HashUtils.getHashedSha256(value) : key;
+    public void put(String key, String value) {
+        // String keyHashed = (key == null || key.equals("null")) ? HashUtils.getHashedSha256(value) : key;
 
         // FILE IS SAVED IN THE CLOSEST NODE FROM THE KEY
-        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
+        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key);
 
         if (closestNode.toString().equals(this.getNodeIPPort())) {
-            this.saveFile(keyHashed, value);
+            this.saveFile(key, value);
         } else {
             try {
                 // REDIRECT THE PUT REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-                String requestMessage = MessageBuilder.storeMessage("PUT", keyHashed, value);
+                String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
                 TcpMessager.sendMessage(closestNode.getIP(), closestNode.getPort(), requestMessage);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-
-        return keyHashed;
     }
 
     @Override
