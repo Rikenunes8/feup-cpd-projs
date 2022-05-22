@@ -248,18 +248,23 @@ public class Store implements IMembership, IService {
     @Override
     public String get(String key) {
         // File (that was requested the content from) is stored in the closest node of the key
-        MembershipInfo closestNode = this.membershipView.getClosestMembershipInfo(key).getValue();
-
-        if (closestNode.toString().equals(this.getNodeIPPort())) {
+        if (this.keys.contains(key)) {
             return this.getFile(key);
-        } else {
-            // REDIRECT THE GET REQUEST TO THE CLOSEST NODE OF THE KEY THAT I FOUND
-            try (Socket socket = new Socket(closestNode.getIP(), closestNode.getPort())) {
-                String requestMessage = MessageBuilder.storeMessage("GET", key);
+        }
+
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+        replicationEntries.put(closestEntry.getKey(), closestEntry.getValue());
+
+        String requestMessage = MessageBuilder.storeMessage("GET", key);
+        for (var node : replicationEntries.values()) {
+            try (Socket socket = new Socket(node.getIP(), node.getPort())) {
                 TcpMessager.sendMessage(socket, requestMessage);
-                return TcpMessager.receiveMessage(socket);
-            } catch (IOException e) {
-                e.printStackTrace();
+                socket.setSoTimeout(2000);
+                String response = TcpMessager.receiveMessage(socket);
+                if (!response.equals("null")) return response;
+            }  catch (IOException e) {
+                System.out.println("Node of get unreachable");
             }
         }
 
