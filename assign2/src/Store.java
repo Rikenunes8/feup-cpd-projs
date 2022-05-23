@@ -1,17 +1,16 @@
 import membership.*;
-
-import static messages.MessageBuilder.leaveMessage;
-import static messages.MulticastMessager.*;
-
 import messages.MessageBuilder;
 import messages.TcpMessager;
 import utils.FileUtils;
 import utils.HashUtils;
 
-import java.io.*;
+import java.io.IOException;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+
+import static messages.MessageBuilder.leaveMessage;
+import static messages.MulticastMessager.sendMcastMessage;
 
 
 public class Store implements IMembership, IService {
@@ -114,13 +113,16 @@ public class Store implements IMembership, IService {
 
     @Override
     public boolean join() {
+        this.startMSCounter();
+
         if (this.membershipCounter % 2 == 0) {
             System.out.println("This node already belongs to a multicast group");
             return false;
         }
         try {
             ServerSocket serverSocket = new ServerSocket(0);
-            this.membershipCounter++;
+
+            this.incrementMSCounter();
 
             this.executorMcast = Executors.newWorkStealingPool(2);
             MembershipCollector.collect(serverSocket, this);
@@ -144,7 +146,7 @@ public class Store implements IMembership, IService {
             return false;
         }
         try {
-            this.membershipCounter++;
+            this.incrementMSCounter();
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
@@ -415,5 +417,68 @@ public class Store implements IMembership, IService {
 
     public boolean isOnline() {
         return this.membershipView.isOnline(this.id);
+    }
+
+    public void startMSCounter(){
+        // check if counter is stored in NV-memory
+        String storedCounter = getFile("membershipCounter");
+        if(storedCounter == null){
+            storedCounter = "-1";
+            saveFile("membershipCounter", storedCounter);
+        }
+
+        this.membershipCounter = Integer.parseInt(storedCounter);
+
+        //TODO This happens when a node crashed, not sure how to handle
+        if(this.membershipCounter % 2 == 0){
+            System.out.println("Error starting membership counter, tried to initialize it with even value!" +
+                    "\nReseting membership counter...");
+            saveFile("membershipCounter", "-1");
+            this.membershipCounter = -1;
+        }
+    }
+
+    public void incrementMSCounter(){
+        // check if counter is stored in NV-memory
+        String storedCounter = getFile("membershipCounter");
+        if(storedCounter == null){
+            storedCounter = String.valueOf(this.membershipCounter);
+        }
+
+        if(this.membershipCounter != Integer.parseInt(storedCounter)){
+            System.out.println("Membership counter on node: " + this.id + " does not match with the stored counter!" +
+                    "\nMembership counter: " +  this.membershipCounter +
+                    "\nStored counter: " + storedCounter +
+                    "\nOverriding stored counter...\n"); // TODO DEBUG - this should never happen
+        }
+
+        this.membershipCounter++;
+        saveFile("membershipCounter", String.valueOf(this.membershipCounter));
+    }
+
+    public void saveLogs(){
+        this.saveFile("membershipLogs", this.membershipView.getMembershipLog().toString());
+    }
+
+    public void getLogs(){
+        String storedLogs = this.getFile("membershipLogs");
+        if(storedLogs == null){
+            System.out.println("No logs found, saving current logs...");
+            this.saveLogs();
+            return;
+        }
+
+        // Compare current logs with stored logs
+        MembershipLog membershipLog = new MembershipLog();
+        for(String log : storedLogs.split("\n")){ // TODO not sure about this!
+            membershipLog.addMembershipInfo(new MembershipLogRecord(log));
+        }
+
+        // TODO if different -> node crashed, not sure how to handle, maybe merge?
+        if(!this.membershipView.getMembershipLog().equals(membershipLog)){
+            System.out.println("Membership logs on node: " + this.id + " does not match with the stored logs!" +
+                    "\nOverriding stored logs...\n"); // TODO DEBUG - this should never happen
+            saveLogs();
+        }
     }
 }
