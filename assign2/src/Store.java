@@ -91,6 +91,7 @@ public class Store implements IMembership, IService {
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
         System.out.println("ID: " + id); // TODO DEBUG
+        FileUtils.createRoot();
         FileUtils.createDirectory(this.id);
 
         String networkInterfaceStr = "loopback"; // TODO

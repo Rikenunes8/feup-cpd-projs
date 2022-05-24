@@ -11,6 +11,17 @@ public class FileUtils {
 
     private static final String STORAGE_ROOT = "network/";
 
+    public static void createRoot() {
+        File directory = new File(STORAGE_ROOT);
+
+        boolean createdFlag = false;
+        if (!Files.exists(Paths.get(STORAGE_ROOT))) {
+            createdFlag = directory.mkdir();
+        }
+
+        System.out.println("Directory " + STORAGE_ROOT + " CREATED: " + createdFlag);
+    }
+
     public static void createDirectory(String id) {
         File directory = new File(STORAGE_ROOT + id);
 
