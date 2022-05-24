@@ -28,6 +28,7 @@ public class Store implements IMembership, IService {
     private int membershipCounter;
     private final MembershipView membershipView;
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
+    private final Set<String> alreadySent; // TODO could this be a String instead of Set??
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -86,6 +87,7 @@ public class Store implements IMembership, IService {
 
         this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
+        this.alreadySent = Collections.synchronizedSet(new HashSet<>());
         this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
@@ -184,15 +186,21 @@ public class Store implements IMembership, IService {
     }
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
         timerTask();
     }
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
         timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
         timerTask();
     }
 
@@ -388,6 +396,9 @@ public class Store implements IMembership, IService {
     }
     public Set<String> getKeys() {
         return keys;
+    }
+    public Set<String> getAlreadySent() {
+        return this.alreadySent;
     }
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getClosestMembershipInfo(keyHashed);

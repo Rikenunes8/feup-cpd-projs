@@ -43,6 +43,14 @@ public class MembershipLog {
         }
     }
 
+    public boolean hasChanged(MembershipLog oldMembershipLog) {
+        // Has changed if only one of the MembershipLog is empty or if the last log does not match
+        if (!this.logs.isEmpty() && !oldMembershipLog.logs.isEmpty())
+            return this.logs.get(this.logs.size()-1) != oldMembershipLog.logs.get(oldMembershipLog.logs.size()-1);
+        else
+            return !(this.logs.isEmpty() && oldMembershipLog.logs.isEmpty());
+    }
+
 
     @Override
     public String toString(){
