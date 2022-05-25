@@ -103,5 +103,4 @@ public class ListenerMcastThread implements Runnable {
             if (next.getKey().equals(this.store.getId())) this.store.transferFile(key);
         }
     }
-
 }

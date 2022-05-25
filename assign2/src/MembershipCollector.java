@@ -50,6 +50,7 @@ public class MembershipCollector {
 
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
+
         store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
         store.mergeMembershipViews(membershipViews);
 

@@ -8,7 +8,6 @@ import java.nio.file.Paths;
 import java.util.Scanner;
 
 public class FileUtils {
-
     private static final String STORAGE_ROOT = "network/";
 
     public static void createRoot() {
@@ -33,8 +32,6 @@ public class FileUtils {
         System.out.println("Directory " + STORAGE_ROOT + id + " CREATED: " + createdFlag);
     }
 
-    // TODO
-    // JAVA NIO -> NON BLOCKING IO
     public static boolean saveFile(String id, String key, String value) {
         try {
             File keyFile = new File(STORAGE_ROOT + id + "/" + key + ".txt");
