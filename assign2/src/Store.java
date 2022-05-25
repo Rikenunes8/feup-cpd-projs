@@ -87,13 +87,15 @@ public class Store implements IMembership, IService {
         this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.alreadySent = Collections.synchronizedSet(new HashSet<>());
-        this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
         System.out.println("ID: " + id); // TODO DEBUG
         FileUtils.createRoot();
         FileUtils.createDirectory(this.id);
+
+        this.startMSCounter();
+        this.getLogs();
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -190,19 +192,28 @@ public class Store implements IMembership, IService {
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) {
+            this.alreadySent.clear();
+            this.saveLogs();
+        }
         timerTask();
     }
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
+            this.alreadySent.clear();
+            this.saveLogs();
+        }
         timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
+            this.alreadySent.clear();
+            this.saveLogs();
+        }
         timerTask();
     }
 
@@ -436,18 +447,9 @@ public class Store implements IMembership, IService {
         String storedCounter = getFile("membershipCounter");
         if(storedCounter == null){
             storedCounter = "-1";
-            saveFile("membershipCounter", storedCounter);
         }
 
         this.membershipCounter = Integer.parseInt(storedCounter);
-
-        //TODO This happens when a node crashed, not sure how to handle
-        if(this.membershipCounter % 2 == 0){
-            System.out.println("Error starting membership counter, tried to initialize it with even value!" +
-                    "\nReseting membership counter...");
-            saveFile("membershipCounter", "-1");
-            this.membershipCounter = -1;
-        }
     }
 
     public void incrementMSCounter(){
@@ -475,7 +477,7 @@ public class Store implements IMembership, IService {
     public void getLogs(){
         String storedLogs = this.getFile("membershipLogs");
         if(storedLogs == null){
-            System.out.println("No logs found, saving current logs...");
+            System.out.println("No logs found, saving current logs...\n");
             this.saveLogs();
             return;
         }
@@ -486,10 +488,13 @@ public class Store implements IMembership, IService {
             membershipLog.addMembershipInfo(new MembershipLogRecord(log));
         }
 
-        // TODO if different -> node crashed, not sure how to handle, maybe merge?
+        // if different -> node crashed, merge
         if(!this.membershipView.getMembershipLog().equals(membershipLog)){
+
+            this.membershipView.getMembershipLog().mergeLogs(membershipLog.last32Logs());
+
             System.out.println("Membership logs on node: " + this.id + " does not match with the stored logs!" +
-                    "\nOverriding stored logs...\n"); // TODO DEBUG - this should never happen
+                    "\nMerging logs...\n");
             saveLogs();
         }
     }
