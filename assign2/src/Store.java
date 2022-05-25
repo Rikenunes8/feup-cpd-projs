@@ -10,6 +10,7 @@ import utils.HashUtils;
 import javax.rmi.ssl.SslRMIClientSocketFactory;
 import java.io.*;
 import java.net.*;
+import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -37,7 +38,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private ScheduledExecutorService executorTimerTask;
 
     // TODO everything
-    public static void main(String[] args) throws RemoteException, InterruptedException {
+    public static void main(String[] args) throws RemoteException, InterruptedException, AlreadyBoundException {
         Store store = parseArgs(args);
 
         // ExecutorService executor = Executors.newWorkStealingPool(8);
@@ -46,8 +47,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
         // according to the number of processors available to the Java virtual machine
 
-        Registry registry = LocateRegistry.createRegistry(store.getStorePort());
-        registry.rebind("membership", store);
+        IMembership stub = (IMembership) UnicastRemoteObject.exportObject(store, 0);
+        Registry registry = LocateRegistry.getRegistry();
+        registry.bind(store.nodeIP, stub);
 
         // executor.execute(new DispatcherRMIThread(store));
 
