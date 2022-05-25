@@ -1,0 +1,11 @@
+#!/bin/bash -e
+
+cd ../build/
+
+# Start registry
+rmiregistry &
+
+# Start stores
+gnome-terminal -- java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.1 3100
+gnome-terminal -- java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.2 3100
+# gnome-terminal -- exec java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.3 3100

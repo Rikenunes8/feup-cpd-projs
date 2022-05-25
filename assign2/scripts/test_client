@@ -1,0 +1,6 @@
+#!/bin/bash -e
+
+cd ../build/
+
+
+# gnome-terminal -- java TestClient 127.0.0.1:3101 join

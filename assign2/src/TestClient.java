@@ -2,10 +2,11 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
-import messages.MessageBuilder;
 
 import java.io.*;
 import java.net.Socket;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.util.Scanner;
 import java.util.regex.Pattern;
 
@@ -24,27 +25,27 @@ public class TestClient {
             System.out.println("Wrong number of expected arguments. \n" + correctInput);
             return;
         }
-/*
-        if (!isValidNodeAccessPoint("UDP", args[0])) {
+
+        if (!isValidNodeAccessPoint("TCP", args[0])) {
             System.out.println("Wrong node access point representation according to the implementation. \n" + correctInput);
             return;
-        }*/
-
+        }
         String nodeAC = args[0];
         String operation = args[1];
         String[] nodeACsep = nodeAC.split(":");
         String nodeIP = nodeACsep[0];
         int nodePort = Integer.parseInt(nodeACsep[1]);
-
         switch (operation) {
             case "join" -> {
                 System.out.println("perform join operation nodeAC = " + nodeAC);
-                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/membership");
+                Registry registry = LocateRegistry.getRegistry();
+                IMembership service = (IMembership) registry.lookup(nodeAC);
                 service.join();
             }
             case "leave" -> {
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
-                IMembership service = (IMembership) Naming.lookup("rmi://"+nodeAC+"/membership");
+                Registry registry = LocateRegistry.getRegistry();
+                IMembership service = (IMembership) registry.lookup(nodeAC);
                 service.leave();
             }
             case "put" -> {
