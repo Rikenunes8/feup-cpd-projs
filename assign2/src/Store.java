@@ -1,8 +1,7 @@
 import membership.*;
 
-import static messages.MessageBuilder.leaveMessage;
 import static messages.MulticastMessager.*;
-
+import static messages.MessageBuilder.leaveMessage;
 import messages.MessageBuilder;
 import messages.TcpMessager;
 import utils.FileUtils;
@@ -10,11 +9,15 @@ import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
-import java.util.*;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
 import java.util.concurrent.*;
+import java.util.*;
 
 
-public class Store implements IMembership, IService {
+public class Store extends UnicastRemoteObject implements IMembership, IService {
     private static final int ALARM_PERIOD = 10;
     public static final int REPLICATION_FACTOR = 3;
 
@@ -38,12 +41,15 @@ public class Store implements IMembership, IService {
     private ExecutorService executorMcast;
     private ScheduledExecutorService executorTimerTask;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws RemoteException {
         Store store = parseArgs(args);
 
         // ExecutorService executor = Executors.newWorkStealingPool(8);
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
         // according to the number of processors available to the Java virtual machine
+
+        Registry registry = LocateRegistry.getRegistry();
+        registry.rebind(store.nodeIP+":"+store.storePort, store);
 
         while (true) {
             try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
@@ -60,7 +66,7 @@ public class Store implements IMembership, IService {
     private static String usage() {
         return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
     }
-    private static Store parseArgs(String[] args) {
+    private static Store parseArgs(String[] args) throws RemoteException{
         InetAddress mcastAddr;
         int mcastPort;
         String nodeIP;
@@ -79,7 +85,8 @@ public class Store implements IMembership, IService {
         return new Store(mcastAddr, mcastPort, nodeIP, storePort);
     }
 
-    public Store(InetAddress mcastAddr, int mcastPort, String nodeIP, int storePort) {
+    public Store(InetAddress mcastAddr, int mcastPort, String nodeIP, int storePort) throws RemoteException {
+        super();
         this.mcastAddr = mcastAddr;
         this.mcastPort = mcastPort;
         this.nodeIP = nodeIP;
@@ -178,12 +185,12 @@ public class Store implements IMembership, IService {
         System.out.println("Shutting down...");
         executorMcast.awaitTermination(1, TimeUnit.SECONDS);
         if (!executorMcast.isTerminated()) executorMcast.shutdownNow();
-
         System.out.println("Shutdown complete");
 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
+
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());

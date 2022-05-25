@@ -1,15 +1,18 @@
+
 import messages.MessageBuilder;
 import messages.TcpMessager;
 import utils.HashUtils;
 
 import java.io.*;
 import java.net.Socket;
+import java.rmi.NotBoundException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.util.Scanner;
 import java.util.regex.Pattern;
 
 public class TestClient {
-
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws NotBoundException, IOException {
         String correctInput = """
                 java TestClient <node_ap> <operation> [<opnd>]\s
                   <node_ap> : IP:PORT (UDP or TCP) | name of the remote object (RMI)
@@ -23,25 +26,27 @@ public class TestClient {
             return;
         }
 
-        if (!isValidNodeAccessPoint("UDP", args[0])) {
+        if (!isValidNodeAccessPoint("TCP", args[0])) {
             System.out.println("Wrong node access point representation according to the implementation. \n" + correctInput);
             return;
         }
-
         String nodeAC = args[0];
         String operation = args[1];
         String[] nodeACsep = nodeAC.split(":");
         String nodeIP = nodeACsep[0];
         int nodePort = Integer.parseInt(nodeACsep[1]);
-
         switch (operation) {
             case "join" -> {
                 System.out.println("perform join operation nodeAC = " + nodeAC);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.simpleMessage("JOIN", ""));
+                Registry registry = LocateRegistry.getRegistry();
+                IMembership service = (IMembership) registry.lookup(nodeAC);
+                service.join();
             }
-            case "leave" ->{
+            case "leave" -> {
                 System.out.println("perform leave operation nodeAC = " + nodeAC);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.simpleMessage("LEAVE", ""));
+                Registry registry = LocateRegistry.getRegistry();
+                IMembership service = (IMembership) registry.lookup(nodeAC);
+                service.leave();
             }
             case "put" -> {
                 if (args.length != 3) {
@@ -50,7 +55,6 @@ public class TestClient {
                 }
                 String filename = args[2];
                 System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
-
                 String value = readFile(filename);
                 if (value == null) break;
                 String key = HashUtils.getHashedSha256(value);
@@ -104,7 +108,6 @@ public class TestClient {
         }
     }
 
-    // TODO change to JAVA NIO
     private static String readFile(String pathname) {
         File keyFile = new File(pathname);
         if (!keyFile.exists()) {

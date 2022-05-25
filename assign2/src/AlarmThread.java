@@ -1,15 +1,11 @@
 import messages.MessageBuilder;
-import messages.TcpMessager;
 
 import java.io.IOException;
-import java.net.Socket;
-import java.util.Map;
 
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class AlarmThread implements Runnable{
     private final Store store;
-
     public AlarmThread(Store store) {
         this.store = store;
     }

@@ -1,0 +1,17 @@
+#!/bin/bash -e
+
+cd ../build/
+
+# Start registry
+if sudo netstat -lnp | grep -q rmiregistry; then
+    echo "RMI registry already initialized on port 1099"
+else
+  echo "Initializing RMI registry on port 1099"
+  rmiregistry &
+fi
+
+# Start stores
+gnome-terminal -- java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.1 3100
+gnome-terminal -- java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.2 3100
+gnome-terminal -- java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.3 3100
+gnome-terminal -- java -Djava.rmi.server.codebase=file:./ Store 224.0.0.0 3000 127.0.0.4 3100

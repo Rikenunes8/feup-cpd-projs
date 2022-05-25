@@ -1,0 +1,7 @@
+#!/bin/bash
+
+rm -rf ../build/
+mkdir ../build
+cd ../src/
+
+javac membership/*.java messages/*.java utils/*.java ./*.java  -d ../build/
