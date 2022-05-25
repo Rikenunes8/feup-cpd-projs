@@ -1,18 +1,18 @@
-import java.net.MalformedURLException;
-import java.rmi.Naming;
-import java.rmi.NotBoundException;
-import java.rmi.RemoteException;
+
+import messages.MessageBuilder;
+import messages.TcpMessager;
+import utils.HashUtils;
 
 import java.io.*;
 import java.net.Socket;
+import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.util.Scanner;
 import java.util.regex.Pattern;
 
 public class TestClient {
-
-    public static void main(String[] args) throws MalformedURLException, NotBoundException, RemoteException {
+    public static void main(String[] args) throws NotBoundException, IOException {
         String correctInput = """
                 java TestClient <node_ap> <operation> [<opnd>]\s
                   <node_ap> : IP:PORT (UDP or TCP) | name of the remote object (RMI)
@@ -49,14 +49,19 @@ public class TestClient {
                 service.leave();
             }
             case "put" -> {
-                if (args.length != 4) {
+                if (args.length != 3) {
                     System.out.println("Excepted 2 Operation Argument since is a PUT key-value operation. \n" + correctInput);
                     return;
                 }
                 String filename = args[2];
                 System.out.println("perform put operation nodeAC= " + nodeAC + " , filename= " + filename);
                 String value = readFile(filename);
-                sendMessage(nodeIP, nodePort, "put " + value);
+                if (value == null) break;
+                String key = HashUtils.getHashedSha256(value);
+                if (key == null) break;
+                
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("PUT", key, value));
+                System.out.println(key);
             }
             case "get" -> {
                 if (args.length != 3) {
@@ -65,7 +70,12 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
-                sendMessage(nodeIP, nodePort, "get " + key);
+
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    TcpMessager.sendMessage(socket, MessageBuilder.storeMessage("GET", key));
+                    String value = TcpMessager.receiveMessage(socket);
+                    System.out.println(value);
+                }
             }
             case "delete" -> {
                 if (args.length != 3) {
@@ -74,7 +84,7 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
-                sendMessage(nodeIP, nodePort, "delete " + key);
+                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("DELETE", key));
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }
@@ -95,16 +105,6 @@ public class TestClient {
         } else {
             System.out.println("Not a valid implementation parameter");
             return false;
-        }
-    }
-
-    private static void sendMessage(String nodeIP, int nodePort, String msg) {
-        try (Socket socket = new Socket(nodeIP, nodePort)) {
-            OutputStream output = socket.getOutputStream();
-            PrintWriter writer = new PrintWriter(output, true);
-            writer.println(msg);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
     }
 

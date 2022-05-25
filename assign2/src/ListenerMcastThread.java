@@ -4,12 +4,15 @@ import messages.MessageBuilder;
 import messages.TcpMessager;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Random;
 
 import static messages.MessageBuilder.parseMembershipMessage;
 import static messages.MulticastMessager.receiveMcastMessage;
 
 public class ListenerMcastThread implements Runnable {
+    private final int MAX_WAIT = 500;
     private final Store store;
 
     public ListenerMcastThread(Store store) {
@@ -31,35 +34,43 @@ public class ListenerMcastThread implements Runnable {
                     case "MEMBERSHIP" -> this.membershipHandler(message);
                     default -> System.out.println("Type case not implemented");
                 }
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }
     }
 
 
-    private void joinHandler(Map<String, String> header) {
+    private void joinHandler(Map<String, String> header) throws InterruptedException {
         System.out.println("Received join message from " + header.get("NodeIP"));
+        String nodeID = header.get("NodeID");
         String nodeIP = header.get("NodeIP");
+        int storePort = Integer.parseInt(header.get("StorePort"));
         int msPort    = Integer.parseInt(header.get("MembershipPort"));
-        int nodePort  = Integer.parseInt(header.get("Port"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
 
-        this.store.updateMembershipView(nodeIP, nodePort, msCounter);
+        this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
 
-        if (!this.store.getNodeIP().equals(nodeIP)) {
-            String msMsg = MessageBuilder.membershipMessage(this.store.getMembershipView(), this.store.getNodeIP());
-            try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
-            catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
-        }
+        if (this.store.getId().equals(nodeID)) return; // Must ignore a join message from itself
+        if (this.store.getAlreadySent().contains(nodeID)) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
+        this.store.getAlreadySent().add(nodeID);
+
+        Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
+
+        String msMsg = MessageBuilder.membershipMessage(this.store.getId(), this.store.getMembershipView());
+        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
+        catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
+
+        transferOwnership(nodeID);
     }
 
     private void leaveHandler(Map<String, String> header) {
         System.out.println("Received leave message from " + header.get("NodeIP"));
+        String nodeID = header.get("NodeID");
         String nodeIP = header.get("NodeIP");
-        int nodePort  = Integer.parseInt(header.get("Port"));
+        int storePort = Integer.parseInt(header.get("StorePort"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
-        this.store.updateMembershipView(nodeIP, nodePort, msCounter);
+        this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
     }
 
     private void membershipHandler(MessageBuilder message) {
@@ -68,4 +79,28 @@ public class ListenerMcastThread implements Runnable {
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
     }
 
+    private void transferOwnership(String nodeID) {
+        var keysCopy = new HashSet<>(this.store.getKeys());
+
+        if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
+            keysCopy.forEach(key -> this.store.copyFile(key, nodeID));
+            return;
+        }
+
+        for (String key : keysCopy) {
+            var closestEntry = this.store.getClosestMembershipInfo(key);
+            var replications = this.store.getReplicationEntries(closestEntry);
+            replications.put(closestEntry.getKey(), closestEntry.getValue());
+
+            if (!replications.containsKey(nodeID) || replications.containsKey(this.store.getId()))
+                continue;
+
+            var next = closestEntry;
+            for (int i = 0; i < Store.REPLICATION_FACTOR; i++) {
+                next = this.store.getNextClosestMembershipInfo(next.getKey());
+            }
+
+            if (next.getKey().equals(this.store.getId())) this.store.transferFile(key);
+        }
+    }
 }

@@ -3,9 +3,6 @@ package membership;
 import java.util.Objects;
 
 public class MembershipInfo {
-    //TODO: GUARDAR DATA DA INFORMAÇÂO
-    //TODO: GUARDAR ESTADO DO NÓ (ADORMECIDO OU NÂO)
-
     private final String ip;
     private final int port;
 
@@ -21,22 +18,20 @@ public class MembershipInfo {
     public String getIP() {
         return this.ip;
     }
-
     public int getPort() {
         return this.port;
     }
 
-    public static String getIPFromString(String rec){
+    private static String getIPFromString(String rec){
         return rec.split(":")[0].trim();
     }
-
-    public static int getPortFromString(String rec){
+    private static int getPortFromString(String rec){
         return Integer.parseInt(rec.split(":")[1].trim());
     }
 
     @Override
     public String toString(){
-        return ip + ":" + port;
+        return this.ip + ":" + this.port;
     }
 
     @Override

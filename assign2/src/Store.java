@@ -1,31 +1,37 @@
 import membership.*;
 
-import static messages.MessageBuilder.messageJoinLeave;
 import static messages.MulticastMessager.*;
-
+import static messages.MessageBuilder.leaveMessage;
 import messages.MessageBuilder;
+import messages.TcpMessager;
 import utils.FileUtils;
 import utils.HashUtils;
 
 import java.io.*;
 import java.net.*;
-import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.concurrent.*;
+import java.util.*;
 
 
 public class Store extends UnicastRemoteObject implements IMembership, IService {
+    private static final int ALARM_PERIOD = 10;
+    public static final int REPLICATION_FACTOR = 3;
+
     private final InetAddress mcastAddr;
     private final int mcastPort;
     private final String nodeIP;
     private final int storePort;
-    private final String hashedId;
+    private final String id;
 
+    private final Set<String> keys;
     private int membershipCounter;
-    private MembershipView membershipView;
+    private final MembershipView membershipView;
+    private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
+    private final Set<String> alreadySent; // TODO could this be a String instead of Set??
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -35,32 +41,25 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private ExecutorService executorMcast;
     private ScheduledExecutorService executorTimerTask;
 
-    // TODO everything
-    public static void main(String[] args) throws RemoteException, InterruptedException {
+    public static void main(String[] args) throws RemoteException {
         Store store = parseArgs(args);
 
         // ExecutorService executor = Executors.newWorkStealingPool(8);
-
-        Runtime runtime = Runtime.getRuntime();
-        ExecutorService executor = Executors.newFixedThreadPool(runtime.availableProcessors());
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
         // according to the number of processors available to the Java virtual machine
 
         Registry registry = LocateRegistry.getRegistry();
         registry.rebind(store.nodeIP+":"+store.storePort, store);
 
-        // executor.execute(new DispatcherRMIThread(store));
-
         while (true) {
-            Thread.sleep(5000);
-            /*
-            try (ServerSocket serverSocket = new ServerSocket(store.getStorePort())){
+            try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
                 Socket socket = serverSocket.accept();
                 System.out.println("Main connection accepted");
 
                 executor.execute(new DispatcherThread(socket, store));
             } catch (IOException e) {
                 throw new RuntimeException(e);
-            }*/
+            }
         }
     }
 
@@ -93,14 +92,18 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
+        this.keys = new HashSet<>();
+        this.pendingQueue = new ConcurrentLinkedQueue<>();
+        this.alreadySent = Collections.synchronizedSet(new HashSet<>());
         this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
+        this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
+        System.out.println("ID: " + id); // TODO DEBUG
+        FileUtils.createRoot();
+        FileUtils.createDirectory(this.id);
+
         String networkInterfaceStr = "loopback"; // TODO
-
-        this.hashedId = HashUtils.getHashedSha256(this.getNodeIPPort());
-        System.out.println("HashID: " + hashedId);
-
         try {
             this.sndDatagramSocket = new DatagramSocket();
             this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
@@ -116,6 +119,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
     }
 
+
+    // ---------- MEMBERSHIP PROTOCOL -------------
+
     @Override
     public boolean join() throws RemoteException{
         if (this.membershipCounter % 2 == 0) {
@@ -127,13 +133,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.membershipCounter++;
 
             this.executorMcast = Executors.newWorkStealingPool(2);
-            // this.executorMcast.execute(new MembershipCollectorThread(serverSocket, this));
+
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
 
-            // TODO make node directory here
-            FileUtils.newDirectory(this.hashedId);
+
+            while (!this.isEmptyPendingQueue()) {
+                this.removeFromPendingQueue().processMessage();
+            }
         } catch (Exception e) {
             System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
@@ -151,11 +159,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-            String msg = messageJoinLeave(this.nodeIP, this.storePort, this.membershipCounter, 0);
+
+            String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
 
+            var keysCopy = new HashSet<String>(this.keys);
+            for (String key : keysCopy) {
+                this.transferFile(key);
+            }
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
@@ -170,116 +183,196 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.rcvDatagramSocket.bind(new InetSocketAddress(this.mcastPort));
         this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
     }
-
     private void endMcastReceiver() throws InterruptedException, IOException {
         this.executorMcast.shutdown();
         System.out.println("Shutting down...");
         executorMcast.awaitTermination(1, TimeUnit.SECONDS);
-        System.out.println("Wait enough");
-        if (!executorMcast.isTerminated()) {
-            System.out.println("Forcing shutdown");
-            executorMcast.shutdownNow();
-            System.out.println("Shutdown complete");
-        }
+        if (!executorMcast.isTerminated()) executorMcast.shutdownNow();
+        System.out.println("Shutdown complete");
 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
 
-    @Override
-    public String put(String key, String value) {
-
-        String keyHashed = (key == null) ? HashUtils.getHashedSha256(value) : key;
-
-        // File is saved in the closest node of the key
-        String closestNode = this.membershipView.getClosestMembershipInfo(keyHashed);
-        if (closestNode.equals(this.getNodeIPPort())) {
-            FileUtils.saveFile(this.hashedId, keyHashed, value);
-            // TODO send to testClient the keyHashed who is responsible to display the key received of the file
-            return keyHashed;
-        } else {
-            // TODO
-            // otherwise, send a put request to the node that was found closest to the key
-            String message = MessageBuilder.messageStore("PUT", keyHashed, value);
-            // TcpMessager to the closestNode
-        }
-
-        return null;
-    }
-
-    @Override
-    public String get(String key) {
-        // Argument is the key returned by put
-
-        // File (that was requested the content from) is stored in the closest node of the key
-        String closestNode = this.membershipView.getClosestMembershipInfo(key);
-        if (closestNode.equals(this.getNodeIPPort())) {
-            return FileUtils.getFile(this.hashedId, key);
-        } else {
-            // TODO
-            // otherwise, send a get request to the node that was found closest to the key
-            String message = MessageBuilder.messageStore("GET", key);
-        }
-
-        return null;
-    }
-
-    @Override
-    public boolean delete(String key) {
-        // Argument is the key returned by put
-
-        // File (that was requested to be deleted) is stored in the closest node of the key
-        String closestNode = this.membershipView.getClosestMembershipInfo(key);
-        if (closestNode.equals(this.getNodeIPPort())) {
-            return FileUtils.deleteFile(this.hashedId, key);
-        } else {
-            // TODO
-            // otherwise, send a delete request to the node that was found closest to the key
-            String message = MessageBuilder.messageStore("DELETE", key);
-        }
-
-        return false;
-    }
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
         timerTask();
     }
-
-    public void updateMembershipView(String nodeIP, int port, int membershipCounter) {
-        this.membershipView.updateMembershipInfo(nodeIP, port, membershipCounter);
+    public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
+        this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
         timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
         timerTask();
     }
 
     private void timerTask() {
         // Compare hashedID with the smaller hashedID in the cluster view
         var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
-        boolean smaller = !infoMap.isEmpty() && hashedId.equals(infoMap.firstKey());
+        boolean smaller = !infoMap.isEmpty() && id.equals(infoMap.firstKey());
         System.out.println("Am I the smaller: " + smaller);
 
         if (this.executorTimerTask == null && smaller) {
             System.out.println("Alarm setted");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
-            String msg = MessageBuilder.membershipMessage(this.membershipView, nodeIP);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this, msg), 0, 10, TimeUnit.SECONDS);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.SECONDS);
         }
         else if (this.executorTimerTask != null && !smaller) {
             System.out.println("Alarm canceled");
-            // TODO does this work
             this.executorTimerTask.shutdown();
-            try {
-                this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                e.printStackTrace(); // TODO
-            }
+            try { this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);}
+            catch (InterruptedException e) { e.printStackTrace(); } // TODO
+
             if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
             this.executorTimerTask = null;
         }
     }
+
+    // ---------- END OF MEMBERSHIP PROTOCOL ---------------
+
+
+    // ---------- SERVICE PROTOCOL -------------
+
+    @Override
+    public void put(String key, String value) {
+        // In order to discard duplicated requests
+        if (this.keys.contains(key)) return;
+
+        // File is stored in the closest node of the key and its replicas
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+
+        if (closestEntry.getKey().equals(this.id)) {
+            this.saveFile(key, value);
+
+            // the closest node of the key is the one responsible for the coordination of the replication
+            for (var nextKey : replicationEntries.keySet())
+                this.redirectService(replicationEntries.get(nextKey), MessageBuilder.storeMessage("PUT", key, value));
+        } else {
+            if (replicationEntries.containsKey(this.id)) this.saveFile(key, value);
+            this.redirectService(closestEntry.getValue(), MessageBuilder.storeMessage("PUT", key, value));
+        }
+    }
+
+    @Override
+    public String get(String key) {
+        // File (that was requested the content from) is stored in the closest node of the key
+        if (this.keys.contains(key)) {
+            return this.getFile(key);
+        }
+
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+        replicationEntries.put(closestEntry.getKey(), closestEntry.getValue());
+
+        String requestMessage = MessageBuilder.storeMessage("GET", key);
+        for (var node : replicationEntries.values()) {
+            try (Socket socket = new Socket(node.getIP(), node.getPort())) {
+                TcpMessager.sendMessage(socket, requestMessage);
+                socket.setSoTimeout(2000);
+                String response = TcpMessager.receiveMessage(socket);
+                if (!response.equals("null")) return response;
+            }  catch (IOException e) {
+                System.out.println("Node of get unreachable");
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public void delete(String key) {
+        // File (that was requested to be deleted) is stored in the closest node of the key and its replicas
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+
+        if (closestEntry.getKey().equals(this.id)) {
+            // In order to discard duplicated requests
+            if (!this.keys.contains(key)) return;
+            this.deleteFile(key);
+
+            // the closest node of the key is the one responsible for the coordination of the replication
+            for (var nextKey : replicationEntries.keySet())
+                this.redirectService(replicationEntries.get(nextKey), MessageBuilder.storeMessage("DELETE", key));
+        } else {
+            if (replicationEntries.containsKey(this.id)) this.deleteFile(key);
+            this.redirectService(closestEntry.getValue(), MessageBuilder.storeMessage("DELETE", key));
+        }
+    }
+
+    public boolean transferFile(String key) {
+        var value = this.getFile(key);
+        if (value == null) return false;
+
+        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
+        if (closestEntry == null) {
+            this.deleteFile(key);
+            return true;
+        }
+
+        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+        // TODO think of a better way to reduce the number of messages exchange
+        String requestMessage = MessageBuilder.storeMessage("PUT", key, value);
+        this.redirectService(closestEntry.getValue(), requestMessage);
+        for (var nextKey : replicationEntries.keySet())
+            this.redirectService(replicationEntries.get(nextKey), requestMessage);
+        this.deleteFile(key);
+        return true;
+    }
+    public boolean copyFile(String key, String nodeID) {
+        var membershipInfo =  this.getMembershipView().getMembershipTable().getMembershipInfoMap().get(nodeID);
+        var value = this.getFile(key);
+        if (value == null) return false;
+        this.redirectService(membershipInfo, MessageBuilder.storeMessage("PUT", key, value));
+        return true;
+    }
+    public void saveFile(String key, String value) {
+        if (FileUtils.saveFile(this.id, key, value)) {
+            this.keys.add(key);
+        }
+    }
+    public String getFile(String key) {
+        return FileUtils.getFile(this.id, key);
+    }
+    public void deleteFile(String key) {
+        if (FileUtils.deleteFile(this.id, key)) {
+            this.keys.remove(key);
+        }
+    }
+
+    public void redirectService(MembershipInfo node, String requestMessage) {
+        try {
+            TcpMessager.sendMessage(node.getIP(), node.getPort(), requestMessage);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
+        Map<String, MembershipInfo> replicationEntries = new HashMap<>();
+
+        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
+        if (lastEntry == null) return replicationEntries;
+        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
+            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
+            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
+            replicationEntries.put(lastEntry.getKey(), lastEntry.getValue());
+        }
+
+        return replicationEntries;
+    }
+
+    // ---------- END OF SERVICE PROTOCOL ---------------
+
+    // -------------- GETS AND SETS ---------------------
 
     public String getNodeIP() {
         return nodeIP;
@@ -289,6 +382,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
     private String getNodeIPPort() {
         return this.nodeIP + ":" + this.storePort;
+    }
+    public String getId() {
+        return this.id;
     }
     public InetAddress getMcastAddr() {
         return mcastAddr;
@@ -308,12 +404,38 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public MembershipView getMembershipView() {
         return membershipView;
     }
-
-    public void setMembershipView(MembershipView membershipView) {
-        this.membershipView = membershipView;
+    public Set<String> getKeys() {
+        return keys;
     }
+    public Set<String> getAlreadySent() {
+        return this.alreadySent;
+    }
+    public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
+        return this.membershipView.getClosestMembershipInfo(keyHashed);
+    }
+    public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
+        return this.membershipView.getNextClosestMembershipInfo(keyHashed);
+    }
+    public int getClusterSize() {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
+    }
+
     public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         this.membershipView.setMembershipTable(membershipTable);
         this.membershipView.setMembershipLog(membershipLog);
+    }
+
+    public void addToPendingQueue(DispatcherThread dispatcherThread) {
+        this.pendingQueue.add(dispatcherThread);
+    }
+    public DispatcherThread removeFromPendingQueue() {
+        return this.pendingQueue.remove();
+    }
+    public boolean isEmptyPendingQueue() {
+        return this.pendingQueue.isEmpty();
+    }
+
+    public boolean isOnline() {
+        return this.membershipView.isOnline(this.id);
     }
 }

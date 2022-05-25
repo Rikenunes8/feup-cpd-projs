@@ -20,8 +20,4 @@ public class HashUtils {
             return null;
         }
     }
-
-    public static String joinIpPort(String ip, int port) {
-        return ip + ":" + port;
-    }
 }

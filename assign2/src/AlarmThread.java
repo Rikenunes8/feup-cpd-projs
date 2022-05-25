@@ -1,26 +1,21 @@
 import messages.MessageBuilder;
-import messages.TcpMessager;
 
 import java.io.IOException;
-import java.net.Socket;
-import java.util.Map;
 
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class AlarmThread implements Runnable{
     private final Store store;
-    private final String msg;
-
-    public AlarmThread(Store store, String msg) {
+    public AlarmThread(Store store) {
         this.store = store;
-        this.msg = msg;
     }
 
     @Override
     public void run() {
         System.out.println("Sending alarm");
+        String msg = MessageBuilder.membershipMessage(this.store.getNodeIP(), this.store.getMembershipView());
         try {
-            sendMcastMessage(this.msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());
+            sendMcastMessage(msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());
         } catch (IOException e) {
             e.printStackTrace();
         }

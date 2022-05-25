@@ -1,7 +1,6 @@
 package membership;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class MembershipTable {
 
@@ -11,43 +10,36 @@ public class MembershipTable {
         this.membershipInfoMap = new TreeMap<>();
     }
 
-    public void addMembershipInfo(String hashedId, MembershipInfo mInfo) {
-        this.membershipInfoMap.put(hashedId, mInfo);
+    public void addMembershipInfo(String id, MembershipInfo msInfo) {
+        this.membershipInfoMap.put(id, msInfo);
     }
 
-
-    public void removeMembershipInfo(String hashedId) {
-        this.membershipInfoMap.remove(hashedId);
-    }
-
-    public Map<String, String> getMembershipInfoList() {
-        return this.membershipInfoMap.entrySet().stream().collect(Collectors.toMap(entry -> entry.getValue().getIP(), Map.Entry::getKey));
+    public void removeMembershipInfo(String id) {
+        this.membershipInfoMap.remove(id);
     }
 
     public TreeMap<String, MembershipInfo> getMembershipInfoMap() {
         return this.membershipInfoMap;
     }
 
-    public String getClosestMembershipInfo(String key) {
-        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key);
-        // the key is after the last hashedId in the tree
-        if (closestNode == null) {
-            // : reassign the closest value as the first one in the tree
-            closestNode = this.membershipInfoMap.firstEntry();
-        }
+    public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String key) {
+        if (this.membershipInfoMap.isEmpty()) return null;
+        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key); // Binary Search to find the closest node
 
-        // return in IP:PORT format
-        return closestNode.getValue().toString();
+        // the key is after the last hashedId in the tree
+        return (closestNode == null)
+                // : reassign the closest value as the first one in the tree
+                ? this.membershipInfoMap.firstEntry()
+                : closestNode;
     }
 
-    @Override
-    public String toString(){
-        StringBuilder ret = new StringBuilder();
-        for (MembershipInfo entry : this.membershipInfoMap.values()){
-            ret.append(entry.toString());
-            ret.append("\n");
-        }
-        return ret.toString();
+    public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String nodeKey) {
+        if (this.membershipInfoMap.isEmpty()) return null;
+        Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.higherEntry(nodeKey);
+
+        return (closestNode == null)
+                ? this.membershipInfoMap.firstEntry()
+                : closestNode;
     }
 
     public void mergeTable(MembershipTable membershipTable) {
@@ -57,5 +49,16 @@ public class MembershipTable {
                 this.membershipInfoMap.put(key, aux.get(key));
             }
         }
+    }
+
+    @Override
+    public String toString(){
+        StringBuilder ret = new StringBuilder();
+        for (var key : this.membershipInfoMap.keySet()){
+            ret.append(key).append(":");
+            ret.append(this.membershipInfoMap.get(key).toString());
+            ret.append("\n");
+        }
+        return ret.toString();
     }
 }
