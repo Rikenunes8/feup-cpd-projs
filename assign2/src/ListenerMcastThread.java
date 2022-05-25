@@ -51,12 +51,14 @@ public class ListenerMcastThread implements Runnable {
 
         this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
 
-        if (this.store.getId().equals(nodeID)) return;
+        if (this.store.getId().equals(nodeID)) return; // Must ignore a join message from itself
+        if (this.store.getAlreadySent().contains(nodeID)) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
+        this.store.getAlreadySent().add(nodeID);
 
         Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
         String msMsg = MessageBuilder.membershipMessage(this.store.getId(), this.store.getMembershipView());
-        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); } // TODO Should not resend if no changes since last time
+        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
         catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
 
         transferOwnership(nodeID);
