@@ -123,7 +123,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     // ---------- MEMBERSHIP PROTOCOL -------------
 
     @Override
-    public boolean join() throws RemoteException{
+    public boolean join() {
         if (this.membershipCounter % 2 == 0) {
             System.out.println("This node already belongs to a multicast group");
             return false;
@@ -133,11 +133,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.membershipCounter++;
 
             this.executorMcast = Executors.newWorkStealingPool(2);
-
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
             this.executorMcast.execute(new ListenerMcastThread(this));
-
 
             while (!this.isEmptyPendingQueue()) {
                 this.removeFromPendingQueue().processMessage();
@@ -159,7 +157,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.membershipCounter++;
 
             // Notice cluster members of my leave
-
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
