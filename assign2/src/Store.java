@@ -46,7 +46,7 @@ public class Store implements IMembership, IService {
         // according to the number of processors available to the Java virtual machine
 
         while (true) {
-            try (ServerSocket serverSocket = new ServerSocket(store.storePort)){
+            try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
                 Socket socket = serverSocket.accept();
                 System.out.println("Main connection accepted");
 
