@@ -9,3 +9,5 @@ start cmd /k java -Djava.rmi.server.codebase=file:.\ Store 224.0.0.0 3000 127.0.
 start cmd /k java -Djava.rmi.server.codebase=file:.\ Store 224.0.0.0 3000 127.0.0.2 3100
 start cmd /k java -Djava.rmi.server.codebase=file:.\ Store 224.0.0.0 3000 127.0.0.3 3100
 start cmd /k java -Djava.rmi.server.codebase=file:.\ Store 224.0.0.0 3000 127.0.0.4 3100
+
+cd ..\scripts
