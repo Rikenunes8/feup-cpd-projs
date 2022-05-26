@@ -81,9 +81,9 @@ public class FileUtils {
             StringBuilder value = new StringBuilder();
             while (sc.hasNextLine()) {
                 value.append(sc.nextLine());
+                value.append("\n");
             }
             sc.close();
-            
             return value.toString();
 
         } catch (IOException e) {

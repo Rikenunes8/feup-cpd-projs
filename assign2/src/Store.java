@@ -1,6 +1,5 @@
 import membership.*;
 
-import static messages.MulticastMessager.*;
 import static messages.MessageBuilder.leaveMessage;
 import messages.MessageBuilder;
 import messages.TcpMessager;
@@ -16,7 +15,6 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.concurrent.*;
 import java.util.*;
 
-import static messages.MessageBuilder.leaveMessage;
 import static messages.MulticastMessager.sendMcastMessage;
 
 
@@ -106,7 +104,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         FileUtils.createDirectory(this.id);
 
         this.startMSCounter();
-        this.getLogs();
+        this.loadLogs();
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -129,8 +127,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public boolean join() {
-        this.startMSCounter();
-
         if (this.membershipCounter % 2 == 0) {
             System.out.println("This node already belongs to a multicast group");
             return false;
@@ -454,58 +450,31 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public void startMSCounter(){
         // check if counter is stored in NV-memory
-        String storedCounter = getFile("membershipCounter");
-        if(storedCounter == null){
-            storedCounter = "-1";
-        }
-
-        this.membershipCounter = Integer.parseInt(storedCounter);
+        String storedCounter = this.getFile("membershipCounter");
+        this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
     }
 
     public void incrementMSCounter(){
-        // check if counter is stored in NV-memory
-        String storedCounter = getFile("membershipCounter");
-        if(storedCounter == null){
-            storedCounter = String.valueOf(this.membershipCounter);
-        }
-
-        if(this.membershipCounter != Integer.parseInt(storedCounter)){
-            System.out.println("Membership counter on node: " + this.id + " does not match with the stored counter!" +
-                    "\nMembership counter: " +  this.membershipCounter +
-                    "\nStored counter: " + storedCounter +
-                    "\nOverriding stored counter...\n"); // TODO DEBUG - this should never happen
-        }
-
         this.membershipCounter++;
-        saveFile("membershipCounter", String.valueOf(this.membershipCounter));
+        FileUtils.saveFile(this.id, "membershipCounter", String.valueOf(this.membershipCounter));
     }
 
     public void saveLogs(){
-        this.saveFile("membershipLogs", this.membershipView.getMembershipLog().toString());
+        FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
     }
 
-    public void getLogs(){
+    public void loadLogs(){
         String storedLogs = this.getFile("membershipLogs");
-        if(storedLogs == null){
-            System.out.println("No logs found, saving current logs...\n");
-            this.saveLogs();
+        if (storedLogs == null) {
+            System.out.println("No previous logs found...\n");
             return;
         }
 
         // Compare current logs with stored logs
         MembershipLog membershipLog = new MembershipLog();
-        for(String log : storedLogs.split("\n")){ // TODO not sure about this!
+        for (String log : storedLogs.split("\n")) {
             membershipLog.addMembershipInfo(new MembershipLogRecord(log));
         }
-
-        // if different -> node crashed, merge
-        if(!this.membershipView.getMembershipLog().equals(membershipLog)){
-
-            this.membershipView.getMembershipLog().mergeLogs(membershipLog.last32Logs());
-
-            System.out.println("Membership logs on node: " + this.id + " does not match with the stored logs!" +
-                    "\nMerging logs...\n");
-            saveLogs();
-        }
+        this.membershipView.setMembershipLog(membershipLog);
     }
 }
