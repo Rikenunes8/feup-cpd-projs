@@ -120,6 +120,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        // If the store went down due to a crash then automatically join on start up
+        if (this.membershipCounter % 2 == 0) {
+            try {
+                initMcastReceiver();
+                this.executorMcast.execute(new ListenerMcastThread(this));
+            }
+            catch (IOException e) {throw new RuntimeException(e);}
+        }
     }
 
 
