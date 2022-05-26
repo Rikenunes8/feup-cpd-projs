@@ -136,8 +136,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             return false;
         }
         try {
-            ServerSocket serverSocket = new ServerSocket(0);
-
+            ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
             this.incrementMSCounter();
 
             this.executorMcast = Executors.newWorkStealingPool(2);
