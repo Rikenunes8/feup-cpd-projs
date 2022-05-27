@@ -92,13 +92,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.alreadySent = Collections.synchronizedSet(new HashSet<>());
-        this.membershipCounter = -1;
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
         System.out.println("ID: " + id); // TODO DEBUG
         FileUtils.createRoot();
         FileUtils.createDirectory(this.id);
+
+        this.startMSCounter();
+        this.loadLogs();
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -116,6 +118,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
 
         this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
+
+        // If the store went down due to a crash then automatically join on start up
+        if (this.membershipCounter % 2 == 0) {
+            try {
+                initMcastReceiver();
+                this.executor.execute(new ListenerMcastThread(this));
+            }
+            catch (IOException e) {throw new RuntimeException(e);}
+        }
     }
 
 
@@ -129,7 +140,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         try {
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
-            this.membershipCounter++;
+            this.incrementMSCounter();
 
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
@@ -152,7 +163,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             return false;
         }
         try {
-            this.membershipCounter++;
+            this.incrementMSCounter();
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
@@ -188,19 +199,28 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) {
+            this.alreadySent.clear();
+            this.saveLogs();
+        }
         timerTask();
     }
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
+            this.alreadySent.clear();
+            this.saveLogs();
+        }
         timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) this.alreadySent.clear();
+        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
+            this.alreadySent.clear();
+            this.saveLogs();
+        }
         timerTask();
     }
 
@@ -431,5 +451,35 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public void execute(Runnable runnable) {
         this.executor.execute(runnable);
+    }
+
+    public void startMSCounter(){
+        // check if counter is stored in NV-memory
+        String storedCounter = this.getFile("membershipCounter");
+        this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
+    }
+
+    public void incrementMSCounter(){
+        this.membershipCounter++;
+        FileUtils.saveFile(this.id, "membershipCounter", String.valueOf(this.membershipCounter));
+    }
+
+    public void saveLogs(){
+        FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
+    }
+
+    public void loadLogs(){
+        String storedLogs = this.getFile("membershipLogs");
+        if (storedLogs == null) {
+            System.out.println("No previous logs found...\n");
+            return;
+        }
+
+        // Compare current logs with stored logs
+        MembershipLog membershipLog = new MembershipLog();
+        for (String log : storedLogs.split("\n")) {
+            membershipLog.addMembershipInfo(new MembershipLogRecord(log));
+        }
+        this.membershipView.setMembershipLog(membershipLog);
     }
 }

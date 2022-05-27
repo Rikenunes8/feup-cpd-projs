@@ -61,4 +61,19 @@ public class MembershipLog {
         }
         return ret.toString();
     }
+
+    @Override
+    public boolean equals(Object obj){
+        if(!obj.getClass().equals(this.getClass()))
+            return false;
+
+        if(this.logs.size() != ((MembershipLog) obj).getLogs().size())
+            return false;
+
+        for(int i = 0; i < this.logs.size(); i++)
+            if(!this.logs.get(i).equals(((MembershipLog) obj).getLogs().get(i)))
+                return false;
+
+        return true;
+    }
 }
