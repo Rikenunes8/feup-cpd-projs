@@ -1,12 +1,13 @@
 import membership.*;
 
+import static messages.MulticastMessager.*;
 import static messages.MessageBuilder.leaveMessage;
 import messages.MessageBuilder;
 import messages.TcpMessager;
 import utils.FileUtils;
 import utils.HashUtils;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.*;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -14,8 +15,6 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.concurrent.*;
 import java.util.*;
-
-import static messages.MulticastMessager.sendMcastMessage;
 
 
 public class Store extends UnicastRemoteObject implements IMembership, IService {
@@ -39,15 +38,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final DatagramSocket sndDatagramSocket;
     private DatagramSocket rcvDatagramSocket;
 
-    private ExecutorService executorMcast;
+    private Future<?> listenerMcastFuture;
+    private ExecutorService executor;
     private ScheduledExecutorService executorTimerTask;
 
     public static void main(String[] args) throws RemoteException {
         Store store = parseArgs(args);
-
-        // ExecutorService executor = Executors.newWorkStealingPool(8);
-        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
-        // according to the number of processors available to the Java virtual machine
 
         Registry registry = LocateRegistry.getRegistry();
         registry.rebind(store.nodeIP+":"+store.storePort, store);
@@ -57,7 +53,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 Socket socket = serverSocket.accept();
                 System.out.println("Main connection accepted");
 
-                executor.execute(new DispatcherThread(socket, store));
+                store.executor.execute(new DispatcherThread(socket, store));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -121,11 +117,13 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             throw new RuntimeException(e);
         }
 
+        this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
+
         // If the store went down due to a crash then automatically join on start up
         if (this.membershipCounter % 2 == 0) {
             try {
                 initMcastReceiver();
-                this.executorMcast.execute(new ListenerMcastThread(this));
+                this.executor.execute(new ListenerMcastThread(this));
             }
             catch (IOException e) {throw new RuntimeException(e);}
         }
@@ -144,10 +142,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
             this.incrementMSCounter();
 
-            this.executorMcast = Executors.newWorkStealingPool(2);
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
-            this.executorMcast.execute(new ListenerMcastThread(this));
+            this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
             while (!this.isEmptyPendingQueue()) {
                 this.removeFromPendingQueue().processMessage();
@@ -174,7 +171,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             endMcastReceiver();
 
-            var keysCopy = new HashSet<String>(this.keys);
+            var keysCopy = new HashSet<>(this.keys);
             for (String key : keysCopy) {
                 this.transferFile(key);
             }
@@ -192,13 +189,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.rcvDatagramSocket.bind(new InetSocketAddress(this.mcastPort));
         this.rcvDatagramSocket.joinGroup(this.inetSocketAddress, this.networkInterface);
     }
-    private void endMcastReceiver() throws InterruptedException, IOException {
-        this.executorMcast.shutdown();
-        System.out.println("Shutting down...");
-        executorMcast.awaitTermination(1, TimeUnit.SECONDS);
-        if (!executorMcast.isTerminated()) executorMcast.shutdownNow();
-        System.out.println("Shutdown complete");
-
+    private void endMcastReceiver() throws IOException {
+        this.listenerMcastFuture.cancel(true);
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
@@ -455,6 +447,10 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public boolean isOnline() {
         return this.membershipView.isOnline(this.id);
+    }
+
+    public void execute(Runnable runnable) {
+        this.executor.execute(runnable);
     }
 
     public void startMSCounter(){
