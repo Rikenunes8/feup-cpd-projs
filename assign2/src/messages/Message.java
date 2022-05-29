@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
-public class MessageBuilder {
+public class Message {
     static final String PUT = "PUT";
     static final String GET = "GET";
     static final String DEL = "DELETE";
@@ -22,7 +22,7 @@ public class MessageBuilder {
         return body;
     }
 
-    public MessageBuilder(String msg) {
+    public Message(String msg) {
         // TODO
         System.out.println("\n--- MESSAGE ---");
         System.out.println(msg); // DEBUG
@@ -125,7 +125,7 @@ public class MessageBuilder {
         return buildHeader(headerLines) + body;
     }
 
-    public static MembershipView parseMembershipMessage(MessageBuilder message) {
+    public static MembershipView parseMembershipMessage(Message message) {
         MembershipTable membershipTable = new MembershipTable();
         MembershipLog membershipLog = new MembershipLog();
         String body = message.getBody();

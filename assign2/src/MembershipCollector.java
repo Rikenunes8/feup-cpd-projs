@@ -1,5 +1,5 @@
 import membership.MembershipView;
-import messages.MessageBuilder;
+import messages.Message;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -11,7 +11,7 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static messages.MessageBuilder.joinMessage;
+import static messages.Message.joinMessage;
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class MembershipCollector {
@@ -65,9 +65,9 @@ public class MembershipCollector {
             System.out.println("New membership connection");
             String msg = TcpMessager.receiveMessage(socket);
 
-            MessageBuilder message = new MessageBuilder(msg);
+            Message message = new Message(msg);
             String id = message.getHeader().get("NodeID");
-            MembershipView membershipView = MessageBuilder.parseMembershipMessage(message);
+            MembershipView membershipView = Message.parseMembershipMessage(message);
 
             socket.close();
             return new AbstractMap.SimpleEntry<>(id, membershipView);

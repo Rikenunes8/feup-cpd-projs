@@ -1,4 +1,4 @@
-import messages.MessageBuilder;
+import messages.Message;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -8,7 +8,7 @@ import java.util.Map;
 public class DispatcherThread implements Runnable {
     private final Socket socket;
     private final Store store;
-    private MessageBuilder message;
+    private Message message;
 
     public DispatcherThread(Socket socket, Store store) {
         this.socket = socket;
@@ -19,7 +19,7 @@ public class DispatcherThread implements Runnable {
     public void run() {
         try {
             String msg = TcpMessager.receiveMessage(this.socket);
-            this.message = new MessageBuilder(msg);
+            this.message = new Message(msg);
             this.processMessage();
         } catch (IOException e) {
             throw new RuntimeException(e);

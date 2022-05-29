@@ -1,4 +1,4 @@
-import messages.MessageBuilder;
+import messages.Message;
 
 import java.io.IOException;
 
@@ -13,7 +13,7 @@ public class AlarmThread implements Runnable{
     @Override
     public void run() {
         System.out.println("Sending alarm");
-        String msg = MessageBuilder.membershipMessage(this.store.getNodeIP(), this.store.getMembershipView());
+        String msg = Message.membershipMessage(this.store.getNodeIP(), this.store.getMembershipView());
         try {
             sendMcastMessage(msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());
         } catch (IOException e) {

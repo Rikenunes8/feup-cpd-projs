@@ -1,5 +1,5 @@
 
-import messages.MessageBuilder;
+import messages.Message;
 import messages.TcpMessager;
 import utils.HashUtils;
 
@@ -60,7 +60,7 @@ public class TestClient {
                 String key = HashUtils.getHashedSha256(value);
                 if (key == null) break;
                 
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("PUT", key, value));
+                TcpMessager.sendMessage(nodeIP, nodePort, Message.storeMessage("PUT", key, value));
                 System.out.println(key);
             }
             case "get" -> {
@@ -72,7 +72,7 @@ public class TestClient {
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageBuilder.storeMessage("GET", key));
+                    TcpMessager.sendMessage(socket, Message.storeMessage("GET", key));
                     String value = TcpMessager.receiveMessage(socket);
                     System.out.println(value);
                 }
@@ -84,7 +84,7 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageBuilder.storeMessage("DELETE", key));
+                TcpMessager.sendMessage(nodeIP, nodePort, Message.storeMessage("DELETE", key));
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }
