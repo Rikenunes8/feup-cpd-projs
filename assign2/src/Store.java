@@ -1,8 +1,8 @@
 import membership.*;
 
 import static messages.MulticastMessager.*;
-import static messages.Message.leaveMessage;
-import messages.Message;
+import static messages.MessageStore.leaveMessage;
+import messages.MessageStore;
 import messages.TcpMessager;
 import utils.FileUtils;
 import utils.HashUtils;
@@ -265,10 +265,10 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             // the closest node of the key is the one responsible for the coordination of the replication
             for (var nextKey : replicationEntries.keySet())
-                this.redirectService(replicationEntries.get(nextKey), Message.storeMessage("PUT", key, value));
+                this.redirectService(replicationEntries.get(nextKey), MessageStore.storeMessage("PUT", key, value));
         } else {
             if (replicationEntries.containsKey(this.id)) this.saveFile(key, value);
-            this.redirectService(closestEntry.getValue(), Message.storeMessage("PUT", key, value));
+            this.redirectService(closestEntry.getValue(), MessageStore.storeMessage("PUT", key, value));
         }
     }
 
@@ -283,7 +283,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
         replicationEntries.put(closestEntry.getKey(), closestEntry.getValue());
 
-        String requestMessage = Message.storeMessage("GET", key);
+        String requestMessage = MessageStore.storeMessage("GET", key);
         for (var node : replicationEntries.values()) {
             try (Socket socket = new Socket(node.getIP(), node.getPort())) {
                 TcpMessager.sendMessage(socket, requestMessage);
@@ -311,10 +311,10 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             // the closest node of the key is the one responsible for the coordination of the replication
             for (var nextKey : replicationEntries.keySet())
-                this.redirectService(replicationEntries.get(nextKey), Message.storeMessage("DELETE", key));
+                this.redirectService(replicationEntries.get(nextKey), MessageStore.storeMessage("DELETE", key));
         } else {
             if (replicationEntries.containsKey(this.id)) this.deleteFile(key);
-            this.redirectService(closestEntry.getValue(), Message.storeMessage("DELETE", key));
+            this.redirectService(closestEntry.getValue(), MessageStore.storeMessage("DELETE", key));
         }
     }
 
@@ -330,7 +330,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
         Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
         // TODO think of a better way to reduce the number of messages exchange
-        String requestMessage = Message.storeMessage("PUT", key, value);
+        String requestMessage = MessageStore.storeMessage("PUT", key, value);
         this.redirectService(closestEntry.getValue(), requestMessage);
         for (var nextKey : replicationEntries.keySet())
             this.redirectService(replicationEntries.get(nextKey), requestMessage);
@@ -341,7 +341,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         var membershipInfo =  this.getMembershipView().getMembershipTable().getMembershipInfoMap().get(nodeID);
         var value = this.getFile(key);
         if (value == null) return false;
-        this.redirectService(membershipInfo, Message.storeMessage("PUT", key, value));
+        this.redirectService(membershipInfo, MessageStore.storeMessage("PUT", key, value));
         return true;
     }
     public void saveFile(String key, String value) {

@@ -1,5 +1,5 @@
 import membership.MembershipView;
-import messages.Message;
+import messages.MessageStore;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -11,7 +11,6 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static messages.Message.joinMessage;
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class MembershipCollector {
@@ -24,7 +23,7 @@ public class MembershipCollector {
         System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
-        String msg = joinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
+        String msg = MessageStore.joinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
 
         boolean send = true;
         int attempts = 0;
@@ -65,9 +64,9 @@ public class MembershipCollector {
             System.out.println("New membership connection");
             String msg = TcpMessager.receiveMessage(socket);
 
-            Message message = new Message(msg);
+            MessageStore message = new MessageStore(msg);
             String id = message.getHeader().get("NodeID");
-            MembershipView membershipView = Message.parseMembershipMessage(message);
+            MembershipView membershipView = MessageStore.parseMembershipMessage(message);
 
             socket.close();
             return new AbstractMap.SimpleEntry<>(id, membershipView);

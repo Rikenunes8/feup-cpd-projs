@@ -1,5 +1,5 @@
 import membership.MembershipView;
-import messages.Message;
+import messages.MessageStore;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 
-import static messages.Message.parseMembershipMessage;
+import static messages.MessageStore.parseMembershipMessage;
 
 public class DispatcherMcastThread implements Runnable {
     private final int MAX_WAIT = 500;
@@ -22,7 +22,7 @@ public class DispatcherMcastThread implements Runnable {
 
     @Override
     public void run() {
-        Message message = new Message(this.msgString);
+        MessageStore message = new MessageStore(this.msgString);
         try {
             Map<String, String> header = message.getHeader();
             switch (header.get("Type")) {
@@ -52,7 +52,7 @@ public class DispatcherMcastThread implements Runnable {
 
         Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
-        String msMsg = Message.membershipMessage(this.store.getId(), this.store.getMembershipView());
+        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
         catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
 
@@ -68,7 +68,7 @@ public class DispatcherMcastThread implements Runnable {
         this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
     }
 
-    private void membershipHandler(Message message) {
+    private void membershipHandler(MessageStore message) {
         System.out.println("Multicast Membership Message received");
         MembershipView view = parseMembershipMessage(message);
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
