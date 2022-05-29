@@ -2,6 +2,8 @@ import membership.*;
 
 import static messages.MulticastMessager.*;
 import static messages.MessageStore.leaveMessage;
+
+import messages.Message;
 import messages.MessageStore;
 import messages.TcpMessager;
 import utils.FileUtils;
@@ -27,7 +29,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final int storePort;
     private final String id;
 
-    private final Set<String> keys;
+    private final Map<String, ReplicaTracker> keys;
     private int membershipCounter;
     private final MembershipView membershipView;
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
@@ -89,7 +91,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
-        this.keys = new HashSet<>();
+        this.keys = new HashMap<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.alreadySent = Collections.synchronizedSet(new HashSet<>());
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
@@ -120,13 +122,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
 
         // If the store went down due to a crash then automatically join on start up
-        if (this.membershipCounter % 2 == 0) {
-            try {
-                initMcastReceiver();
-                this.executor.execute(new ListenerMcastThread(this));
-            }
-            catch (IOException e) {throw new RuntimeException(e);}
-        }
+        if (this.membershipCounter % 2 == 0) joinAfterCrash();
     }
 
 
@@ -171,7 +167,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             endMcastReceiver();
 
-            var keysCopy = new HashSet<>(this.keys);
+            var keysCopy = new HashSet<>(this.keys.keySet());
             for (String key : keysCopy) {
                 this.transferFile(key);
             }
@@ -194,36 +190,36 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
-
+    private void joinAfterCrash() {
+        try {
+            initMcastReceiver();
+            this.executor.execute(new ListenerMcastThread(this));
+        }
+        catch (IOException e) {throw new RuntimeException(e);}
+    }
 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
+        posUpdate(oldLogs);
+    }
+    public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
+        this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
+        posUpdate(oldLogs);
+    }
+    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
+        this.membershipView.mergeMembershipViews(membershipViews);
+        posUpdate(oldLogs);
+    }
+    private void posUpdate(List<MembershipLogRecord> oldLogs) {
         if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) {
             this.alreadySent.clear();
             this.saveLogs();
         }
         timerTask();
     }
-    public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
-        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
-        this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
-            this.alreadySent.clear();
-            this.saveLogs();
-        }
-        timerTask();
-    }
-    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
-        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
-        this.membershipView.mergeMembershipViews(membershipViews);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
-            this.alreadySent.clear();
-            this.saveLogs();
-        }
-        timerTask();
-    }
-
     private void timerTask() {
         // Compare hashedID with the smaller hashedID in the cluster view
         var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
@@ -252,30 +248,30 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     // ---------- SERVICE PROTOCOL -------------
 
     @Override
-    public void put(String key, String value) {
-        // In order to discard duplicated requests
-        if (this.keys.contains(key)) return;
+    public String put(String key, String value) {
+        if (this.keys.containsKey(key) && this.keys.get(key) != null) {
+            if (!this.keys.get(key).isActive()) {
+                this.saveFile(key, value);
+                Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(
+                        new AbstractMap.SimpleEntry<>(this.id, new MembershipInfo(this.nodeIP, this.storePort)));
 
-        // File is stored in the closest node of the key and its replicas
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
-
-        if (closestEntry.getKey().equals(this.id)) {
-            this.saveFile(key, value);
-
-            // the closest node of the key is the one responsible for the coordination of the replication
-            for (var nextKey : replicationEntries.keySet())
-                this.redirectService(replicationEntries.get(nextKey), MessageStore.storeMessage("PUT", key, value));
-        } else {
-            if (replicationEntries.containsKey(this.id)) this.saveFile(key, value);
-            this.redirectService(closestEntry.getValue(), MessageStore.storeMessage("PUT", key, value));
+                // the closest node of the key is the one responsible for the coordination of the replication
+                for (var nextKey : replicationEntries.keySet()) {
+                    this.redirectService(replicationEntries.get(nextKey), MessageStore.storeMessage("PUT", key, value));
+                    this.keys.get(key).addReplica(key);
+                }
+            }
         }
+        else {
+            this.saveFile(key, value);
+        }
+        return Message.simpleMessage("ACK", "");
     }
 
     @Override
     public String get(String key) {
         // File (that was requested the content from) is stored in the closest node of the key
-        if (this.keys.contains(key)) {
+        if (this.keys.containsKey(key)) {
             return this.getFile(key);
         }
 
@@ -299,23 +295,19 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
 
     @Override
-    public void delete(String key) {
-        // File (that was requested to be deleted) is stored in the closest node of the key and its replicas
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
-
-        if (closestEntry.getKey().equals(this.id)) {
-            // In order to discard duplicated requests
-            if (!this.keys.contains(key)) return;
+    public String delete(String key) {
+        if (this.keys.containsKey(key)){
+            ReplicaTracker replicaTracker = this.keys.get(key);
+            if (replicaTracker != null) {
+                for (var replica : replicaTracker.getReplicas()) {
+                    this.redirectService(
+                            this.membershipView.getMembershipTable().getMembershipInfoMap().get(replica),
+                            MessageStore.storeMessage("DELETE", key));
+                }
+            }
             this.deleteFile(key);
-
-            // the closest node of the key is the one responsible for the coordination of the replication
-            for (var nextKey : replicationEntries.keySet())
-                this.redirectService(replicationEntries.get(nextKey), MessageStore.storeMessage("DELETE", key));
-        } else {
-            if (replicationEntries.containsKey(this.id)) this.deleteFile(key);
-            this.redirectService(closestEntry.getValue(), MessageStore.storeMessage("DELETE", key));
         }
+        return Message.simpleMessage("ACK", "");
     }
 
     public boolean transferFile(String key) {
@@ -346,7 +338,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
     public void saveFile(String key, String value) {
         if (FileUtils.saveFile(this.id, key, value)) {
-            this.keys.add(key);
+            if (!this.keys.containsKey(key)) this.keys.put(key, null);
         }
     }
     public String getFile(String key) {
@@ -358,12 +350,10 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
     }
 
-    public void redirectService(MembershipInfo node, String requestMessage) {
-        try {
-            TcpMessager.sendMessage(node.getIP(), node.getPort(), requestMessage);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public String redirectService(MembershipInfo node, String requestMessage) {
+        try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage); }
+        catch (IOException e) { e.printStackTrace(); }
+        return null;
     }
 
     public Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
@@ -414,7 +404,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public MembershipView getMembershipView() {
         return membershipView;
     }
-    public Set<String> getKeys() {
+    public Map<String, ReplicaTracker> getKeys() {
         return keys;
     }
     public Set<String> getAlreadySent() {
@@ -481,5 +471,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             membershipLog.addMembershipInfo(new MembershipLogRecord(log));
         }
         this.membershipView.setMembershipLog(membershipLog);
+    }
+
+    public void addCoordinator(String key) {
+        this.keys.put(key, new ReplicaTracker());
     }
 }

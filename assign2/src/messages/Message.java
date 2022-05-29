@@ -8,6 +8,7 @@ public class Message {
     static final String GET = "GET";
     static final String DEL = "DELETE";
 
+    String message;
     Map<String, String> header;
     String body;
 
@@ -17,8 +18,12 @@ public class Message {
     public String getBody() {
         return body;
     }
+    public String getMessage() {
+        return message;
+    }
 
     public Message(String msg) {
+        this.message = msg;
         // TODO
         System.out.println("\n--- MESSAGE ---");
         System.out.println(msg); // DEBUG

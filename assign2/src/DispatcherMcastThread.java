@@ -75,7 +75,7 @@ public class DispatcherMcastThread implements Runnable {
     }
 
     private void transferOwnership(String nodeID) {
-        var keysCopy = new HashSet<>(this.store.getKeys());
+        var keysCopy = new HashSet<>(this.store.getKeys().keySet());
 
         if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
             keysCopy.forEach(key -> this.store.copyFile(key, nodeID));

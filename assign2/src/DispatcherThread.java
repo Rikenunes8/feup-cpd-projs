@@ -29,13 +29,24 @@ public class DispatcherThread implements Runnable {
     public void processMessage() {
         try {
             Map<String, String> header = this.message.getHeader();
-            if (header.containsKey("Type")) {
-                switch (header.get("Type")) {
+            var type = header.getOrDefault("Type", null);
+            var from = header.getOrDefault("From", null);
+            var key = header.getOrDefault("Key", null);
+            if (type != null) {
+                switch (type) {
                     case "JOIN" -> this.store.join();
                     case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
-                        if (!canProcess()) return;
-                        this.store.put(header.get("Key"), this.message.getBody());
+                        TcpMessager.sendMessage(this.socket, Message.simpleMessage("ACK", ""));
+                        if (!canProcess() || from == null || key == null) return;
+                        var closestNode = this.store.getClosestMembershipInfo(key);
+                        boolean coordinator = closestNode.getKey().equals(this.store.getId());
+                        if (from.equals("client") && !coordinator) {
+                            this.store.redirectService(closestNode.getValue(), this.message.getMessage());
+                        } else {
+                            if (from.equals("client") && coordinator) this.store.addCoordinator(key);
+                            this.store.put(key, this.message.getBody());
+                        }
                     }
                     case "GET" -> {
                         if (!canProcess()) return;
@@ -43,8 +54,16 @@ public class DispatcherThread implements Runnable {
                         TcpMessager.sendMessage(this.socket, response);
                     }
                     case "DELETE" -> {
-                        if (!canProcess()) return;
-                        this.store.delete(header.get("Key"));
+                        TcpMessager.sendMessage(this.socket, Message.simpleMessage("ACK", ""));
+                        if (!canProcess() || from == null || key == null) return;
+                        var closestNode = this.store.getClosestMembershipInfo(key);
+                        boolean coordinator = closestNode.getKey().equals(this.store.getId());
+                        if (from.equals("client") && !coordinator) {
+                            this.store.redirectService(closestNode.getValue(), this.message.getMessage());
+                        } else {
+                            if (from.equals("client") && coordinator) this.store.addCoordinator(key);
+                            this.store.delete(key);
+                        }
                     }
                     default -> System.out.println("Type not implemented");
                 }
