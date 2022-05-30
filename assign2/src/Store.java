@@ -103,6 +103,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
         this.startMSCounter();
         this.loadLogs();
+        this.loadKeys();
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -122,7 +123,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
 
         // If the store went down due to a crash then automatically join on start up
-        if (this.membershipCounter % 2 == 0) joinAfterCrash();
+        if (this.membershipCounter % 2 == 0) this.joinAfterCrash();
     }
 
 
@@ -195,6 +196,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
     private void joinAfterCrash() {
         try {
+            this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
             initMcastReceiver();
             this.executor.execute(new ListenerMcastThread(this));
         }
@@ -263,13 +265,14 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
 
             // TODO This must be in a thread and guarantee replication
-            Map<String, MembershipInfo> replicas = this.getReplicationEntries(closestNode);
-            for (var replicaKey : replicas.keySet()) {
-                String resp = this.redirectService(replicas.get(replicaKey), MessageStore.replicaMessage(key, value));
+            for (var replicaKey : this.getPreferenceList(key)) {
+                if (replicaKey.equals(this.id)) continue;
+                String resp = this.redirect(this.getMembershipInfo(replicaKey), MessageStore.replicaMessage(key, value));
             }
+
         }
         else {
-            response = this.redirectService(closestNode.getValue(), MessageStore.putMessage(key, value));
+            response = this.redirect(closestNode.getValue(), MessageStore.putMessage(key, value));
         }
         return response;
     }
@@ -313,11 +316,11 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             // TODO This must be in a thread
             for (var replica : this.getPreferenceList(key)) {
                 if (replica.equals(this.id)) continue;
-                String resp = this.redirectService(this.getMembershipInfo(replica), MessageStore.delReplicaMessage(key));
+                String resp = this.redirect(this.getMembershipInfo(replica), MessageStore.delReplicaMessage(key));
             }
         }
         else {
-            response = this.redirectService(closestNode.getValue(), MessageStore.deleteMessage(key));
+            response = this.redirect(closestNode.getValue(), MessageStore.deleteMessage(key));
         }
         return response;
     }
@@ -341,79 +344,60 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void transfer(String nodeID, String key, boolean delete) {
         String value = FileUtils.getFile(this.id, key);
         if (value == null) return;
-        String response = this.redirectService(getMembershipInfo(nodeID), MessageStore.replicaMessage(key, value));
+        String response = this.redirect(getMembershipInfo(nodeID), MessageStore.replicaMessage(key, value));
         if (delete) FileUtils.deleteFile(this.id, key);
         System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
 
-    public String redirectService(MembershipInfo node, String requestMessage) {
+    public String redirect(MembershipInfo node, String requestMessage) {
         try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage); }
+        catch (ConnectException e) { System.out.println("Node " + nodeIP + " is down"); } // TODO do something
         catch (IOException e) { e.printStackTrace(); }
         return null;
-    }
-
-    public Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
-        Map<String, MembershipInfo> replicationEntries = new HashMap<>();
-
-        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
-        if (lastEntry == null) return replicationEntries;
-        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
-            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
-            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
-            replicationEntries.put(lastEntry.getKey(), lastEntry.getValue());
-        }
-
-        return replicationEntries;
     }
 
     // ---------- END OF SERVICE PROTOCOL ---------------
 
     // -------------- GETS AND SETS ---------------------
 
-    public String getNodeIP() {
-        return nodeIP;
+    public String getId() {
+        return this.id;
     }
-    public int getStorePort() {
-        return this.storePort;
+    public String getNodeIP() {
+        return this.nodeIP;
     }
     private String getNodeIPPort() {
         return this.nodeIP + ":" + this.storePort;
     }
-    public String getId() {
-        return this.id;
-    }
     public InetAddress getMcastAddr() {
-        return mcastAddr;
+        return this.mcastAddr;
+    }
+    public int getStorePort() {
+        return this.storePort;
     }
     public int getMcastPort() {
-        return mcastPort;
+        return this.mcastPort;
+    }
+    public int getMembershipCounter() {
+        return this.membershipCounter;
+    }
+    public int getClusterSize() {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
     }
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
     }
     public DatagramSocket getSndDatagramSocket() {
-        return sndDatagramSocket;
-    }
-    public int getMembershipCounter() {
-        return this.membershipCounter;
+        return this.sndDatagramSocket;
     }
     public MembershipView getMembershipView() {
-        return membershipView;
+        return this.membershipView;
     }
     public String getLastSent() {
         return this.lastSent;
     }
     public Set<String> getKeys() {
-        return keys;
-    }
-    public MembershipInfo getMembershipInfo(String nodeID) {
-        return this.membershipView.getMembershipTable().getMembershipInfoMap().getOrDefault(nodeID, null);
-    }
-    public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
-        return this.membershipView.getClosestMembershipInfo(keyHashed);
-    }
-    public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
-        return this.membershipView.getNextClosestMembershipInfo(keyHashed);
+        return this.keys;
     }
     public List<String> getPreferenceList(String key) {
         List<String> preferenceList = new ArrayList<>();
@@ -423,22 +407,21 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         preferenceList.add(closestKey);
         String lastEntry = closestKey;
         for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
-            lastEntry = this.getNextClosestMembershipInfo(lastEntry).getKey();
+            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry).getKey();
             if (lastEntry.equals(closestKey)) break;
             preferenceList.add(lastEntry);
         }
         return preferenceList;
     }
-    public int getClusterSize() {
-        return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
+    public MembershipInfo getMembershipInfo(String nodeID) {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().getOrDefault(nodeID, null);
+    }
+    public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
+        return this.membershipView.getClosestMembershipInfo(keyHashed);
     }
 
     public void setLastSent(String nodeID) {
         this.lastSent = nodeID;
-    }
-    public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        this.membershipView.setMembershipTable(membershipTable);
-        this.membershipView.setMembershipLog(membershipLog);
     }
 
     public void addToPendingQueue(DispatcherThread dispatcherThread) {
@@ -464,16 +447,14 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         String storedCounter = FileUtils.getFile(this.id, "membershipCounter");
         this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
     }
-
     public void incrementMSCounter(){
         this.membershipCounter++;
         FileUtils.saveFile(this.id, "membershipCounter", String.valueOf(this.membershipCounter));
     }
 
     public void saveLogs(){
-        FileUtils.saveFile(this.id, "membershipLogs_", this.membershipView.getMembershipLog().toString());
+        FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
     }
-
     public void loadLogs(){
         String storedLogs = FileUtils.getFile(this.id, "membershipLogs");
         if (storedLogs == null) {
@@ -489,5 +470,11 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.membershipView.setMembershipLog(membershipLog);
     }
 
-
+    public void loadKeys() {
+        List<String> files = FileUtils.listFiles(this.id);
+        List<String> fileKeys = files.stream()
+                .filter(name -> !name.startsWith("membership"))
+                .map(name -> name.split("\\.")[0]).toList();
+        this.keys.addAll(fileKeys);
+    }
 }

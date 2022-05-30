@@ -5,6 +5,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Scanner;
 
 public class FileUtils {
@@ -110,7 +113,16 @@ public class FileUtils {
         return false;
     }
 
+    public static List<String> listFiles(String id) {
+        File directory = new File(STORAGE_ROOT + id);
+        String[] filesArr = directory.list();
+        if (filesArr == null) return new ArrayList<>();
+        return new ArrayList<>(Arrays.asList(filesArr));
+    }
+
     public static String sub(String key) {
         return key.substring(0, 14);
     }
+
+
 }
