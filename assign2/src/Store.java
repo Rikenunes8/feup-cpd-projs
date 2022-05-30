@@ -1,9 +1,9 @@
 import membership.*;
 
+import static messages.Message.ackMessage;
 import static messages.MulticastMessager.*;
 import static messages.MessageStore.leaveMessage;
 
-import messages.Message;
 import messages.MessageStore;
 import messages.TcpMessager;
 import utils.FileUtils;
@@ -29,11 +29,11 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final int storePort;
     private final String id;
 
-    private final Map<String, ReplicaTracker> keys;
+    private final Set<String> keys;
     private int membershipCounter;
     private final MembershipView membershipView;
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
-    private final Set<String> alreadySent; // TODO could this be a String instead of Set??
+    private String lastSent;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -91,9 +91,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.nodeIP = nodeIP;
         this.storePort = storePort;
 
-        this.keys = new HashMap<>();
+        this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
-        this.alreadySent = Collections.synchronizedSet(new HashSet<>());
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
@@ -160,17 +159,21 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         try {
             this.incrementMSCounter();
+            this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
+
+
+            var keysCopy = new HashSet<>(this.keys);
+            for (String key : keysCopy) {
+                var preferenceList = getPreferenceList(key);
+                if (preferenceList.size() < REPLICATION_FACTOR) continue;
+                this.transferFile(preferenceList.get(REPLICATION_FACTOR).getKey(), key, true);
+            }
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
-
-            var keysCopy = new HashSet<>(this.keys.keySet());
-            for (String key : keysCopy) {
-                this.transferFile(key);
-            }
         } catch (Exception e) {
             System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e);
@@ -215,7 +218,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
     private void posUpdate(List<MembershipLogRecord> oldLogs) {
         if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) {
-            this.alreadySent.clear();
+            this.lastSent = null;
             this.saveLogs();
         }
         timerTask();
@@ -224,7 +227,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         // Compare hashedID with the smaller hashedID in the cluster view
         var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
         boolean smaller = !infoMap.isEmpty() && id.equals(infoMap.firstKey());
-        System.out.println("Am I the smaller: " + smaller);
 
         if (this.executorTimerTask == null && smaller) {
             System.out.println("Alarm setted");
@@ -249,105 +251,97 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public String put(String key, String value) {
-        if (this.keys.containsKey(key) && this.keys.get(key) != null) {
-            if (!this.keys.get(key).isActive()) {
-                this.saveFile(key, value);
-                Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(
-                        new AbstractMap.SimpleEntry<>(this.id, new MembershipInfo(this.nodeIP, this.storePort)));
+        String response;
+        var closestNode = this.getClosestMembershipInfo(key);
+        if (closestNode.getKey().equals(this.id)) {
+            if (FileUtils.saveFile(this.id, key, value)) {
+                this.keys.add(key);
+                response = ackMessage("SUCCESS");
+            }
+            else {
+                return ackMessage("FAILURE - Couldn't save the file");
+            }
 
-                // the closest node of the key is the one responsible for the coordination of the replication
-                for (var nextKey : replicationEntries.keySet()) {
-                    this.redirectService(replicationEntries.get(nextKey), MessageStore.storeMessage("PUT", key, value));
-                    this.keys.get(key).addReplica(key);
-                }
+            // TODO This must be in a thread and guarantee replication
+            Map<String, MembershipInfo> replicas = this.getReplicationEntries(closestNode);
+            for (var replicaKey : replicas.keySet()) {
+                String resp = this.redirectService(replicas.get(replicaKey), MessageStore.replicaMessage(key, value));
             }
         }
         else {
-            this.saveFile(key, value);
+            response = this.redirectService(closestNode.getValue(), MessageStore.putMessage(key, value));
         }
-        return Message.simpleMessage("ACK", "");
+        return response;
     }
 
     @Override
     public String get(String key) {
-        // File (that was requested the content from) is stored in the closest node of the key
-        if (this.keys.containsKey(key)) {
-            return this.getFile(key);
+        if (this.keys.contains(key)) {
+            return ackMessage(FileUtils.getFile(this.id, key));
         }
 
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
-        replicationEntries.put(closestEntry.getKey(), closestEntry.getValue());
-
-        String requestMessage = MessageStore.storeMessage("GET", key);
-        for (var node : replicationEntries.values()) {
+        var preferenceList = getPreferenceList(key);
+        String requestMessage = MessageStore.getMessage(key);
+        for (var nodeEntry : preferenceList) {
+            if (nodeEntry.getKey().equals(this.id)) continue;
+            MembershipInfo node = nodeEntry.getValue();
             try (Socket socket = new Socket(node.getIP(), node.getPort())) {
                 TcpMessager.sendMessage(socket, requestMessage);
                 socket.setSoTimeout(2000);
-                String response = TcpMessager.receiveMessage(socket);
-                if (!response.equals("null")) return response;
+                return TcpMessager.receiveMessage(socket);
             }  catch (IOException e) {
                 System.out.println("Node of get unreachable");
             }
         }
 
-        return null;
+        return ackMessage("FAILURE - Couldn't find the file required");
     }
 
     @Override
     public String delete(String key) {
-        if (this.keys.containsKey(key)){
-            ReplicaTracker replicaTracker = this.keys.get(key);
-            if (replicaTracker != null) {
-                for (var replica : replicaTracker.getReplicas()) {
-                    this.redirectService(
-                            this.membershipView.getMembershipTable().getMembershipInfoMap().get(replica),
-                            MessageStore.storeMessage("DELETE", key));
-                }
+        String response;
+        var closestNode = this.getClosestMembershipInfo(key);
+
+        if (this.keys.contains(key)) {
+            if (!FileUtils.deleteFile(this.id, key)) {
+                return ackMessage("FAILURE - Couldn't delete the file");
             }
-            this.deleteFile(key);
+            this.keys.remove(key);
+            response = ackMessage("SUCCESS");
+
+            // TODO This must be in a thread
+            for (var replica : this.getPreferenceList(key)) {
+                if (replica.getKey().equals(this.id)) continue;
+                String resp = this.redirectService(replica.getValue(), MessageStore.delReplicaMessage(key));
+            }
         }
-        return Message.simpleMessage("ACK", "");
-    }
-
-    public boolean transferFile(String key) {
-        var value = this.getFile(key);
-        if (value == null) return false;
-
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        if (closestEntry == null) {
-            this.deleteFile(key);
-            return true;
+        else {
+            response = this.redirectService(closestNode.getValue(), MessageStore.deleteMessage(key));
         }
+        return response;
+    }
 
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
-        // TODO think of a better way to reduce the number of messages exchange
-        String requestMessage = MessageStore.storeMessage("PUT", key, value);
-        this.redirectService(closestEntry.getValue(), requestMessage);
-        for (var nextKey : replicationEntries.keySet())
-            this.redirectService(replicationEntries.get(nextKey), requestMessage);
-        this.deleteFile(key);
-        return true;
-    }
-    public boolean copyFile(String key, String nodeID) {
-        var membershipInfo =  this.getMembershipView().getMembershipTable().getMembershipInfoMap().get(nodeID);
-        var value = this.getFile(key);
-        if (value == null) return false;
-        this.redirectService(membershipInfo, MessageStore.storeMessage("PUT", key, value));
-        return true;
-    }
-    public void saveFile(String key, String value) {
+    public String replica(String key, String value) {
         if (FileUtils.saveFile(this.id, key, value)) {
-            if (!this.keys.containsKey(key)) this.keys.put(key, null);
+            this.keys.add(key);
+            return ackMessage("SUCCESS");
         }
+        return ackMessage("FAILURE - Couldn't save the file");
     }
-    public String getFile(String key) {
-        return FileUtils.getFile(this.id, key);
-    }
-    public void deleteFile(String key) {
+    public String delReplica(String key) {
+        if (!this.keys.contains(key)) return ackMessage("Not exists");
         if (FileUtils.deleteFile(this.id, key)) {
             this.keys.remove(key);
+            return ackMessage("SUCCESS");
         }
+        return ackMessage("FAILURE - Couldn't delete the file");
+    }
+
+    public void transferFile(String nodeID, String key, boolean delete) {
+        String value = FileUtils.getFile(this.id, key);
+        if (value == null) return;
+        String response = this.redirectService(getMembershipInfo(nodeID), MessageStore.replicaMessage(key, value));
+        if (delete) FileUtils.deleteFile(this.id, key);
     }
 
     public String redirectService(MembershipInfo node, String requestMessage) {
@@ -404,11 +398,14 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public MembershipView getMembershipView() {
         return membershipView;
     }
-    public Map<String, ReplicaTracker> getKeys() {
+    public String getLastSent() {
+        return this.lastSent;
+    }
+    public Set<String> getKeys() {
         return keys;
     }
-    public Set<String> getAlreadySent() {
-        return this.alreadySent;
+    public MembershipInfo getMembershipInfo(String nodeID) {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().getOrDefault(nodeID, null);
     }
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getClosestMembershipInfo(keyHashed);
@@ -416,10 +413,25 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getNextClosestMembershipInfo(keyHashed);
     }
+    public List<Map.Entry<String, MembershipInfo>> getPreferenceList(String key) {
+        List<Map.Entry<String, MembershipInfo>> preferenceList = new ArrayList<>();
+        var closestEntry = this.getClosestMembershipInfo(key);
+        if (closestEntry == null) return preferenceList;
+        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
+        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
+            lastEntry = this.getNextClosestMembershipInfo(lastEntry.getKey());
+            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
+            preferenceList.add(lastEntry);
+        }
+        return preferenceList;
+    }
     public int getClusterSize() {
         return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
     }
 
+    public void setLastSent(String nodeID) {
+        this.lastSent = nodeID;
+    }
     public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         this.membershipView.setMembershipTable(membershipTable);
         this.membershipView.setMembershipLog(membershipLog);
@@ -445,7 +457,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public void startMSCounter(){
         // check if counter is stored in NV-memory
-        String storedCounter = this.getFile("membershipCounter");
+        String storedCounter = FileUtils.getFile(this.id, "membershipCounter");
         this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
     }
 
@@ -459,7 +471,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
 
     public void loadLogs(){
-        String storedLogs = this.getFile("membershipLogs");
+        String storedLogs = FileUtils.getFile(this.id, "membershipLogs");
         if (storedLogs == null) {
             System.out.println("No previous logs found...\n");
             return;
@@ -473,7 +485,5 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.membershipView.setMembershipLog(membershipLog);
     }
 
-    public void addCoordinator(String key) {
-        this.keys.put(key, new ReplicaTracker());
-    }
+
 }

@@ -5,10 +5,13 @@ public class MessageClient extends Message{
         super(msg);
     }
 
-    public static String storeMessage(String operation, String key, String value) {
-        return storeMessage(operation, key, value, true);
+    public static String putMessage(String key, String value) {
+        return Message.putMessage(key, value);
     }
-    public static String storeMessage(String operation, String key) {
-        return storeMessage(operation, key, null, true);
+    public static String getMessage(String key) {
+        return Message.getMessage(key);
+    }
+    public static String deleteMessage(String key) {
+        return Message.deleteMessage(key);
     }
 }

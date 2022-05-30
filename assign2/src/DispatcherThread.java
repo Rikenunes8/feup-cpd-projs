@@ -1,4 +1,5 @@
 import messages.Message;
+import messages.MessageStore;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -30,41 +31,37 @@ public class DispatcherThread implements Runnable {
         try {
             Map<String, String> header = this.message.getHeader();
             var type = header.getOrDefault("Type", null);
-            var from = header.getOrDefault("From", null);
             var key = header.getOrDefault("Key", null);
             if (type != null) {
                 switch (type) {
                     case "JOIN" -> this.store.join();
                     case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
-                        TcpMessager.sendMessage(this.socket, Message.simpleMessage("ACK", ""));
-                        if (!canProcess() || from == null || key == null) return;
-                        var closestNode = this.store.getClosestMembershipInfo(key);
-                        boolean coordinator = closestNode.getKey().equals(this.store.getId());
-                        if (from.equals("client") && !coordinator) {
-                            this.store.redirectService(closestNode.getValue(), this.message.getMessage());
-                        } else {
-                            if (from.equals("client") && coordinator) this.store.addCoordinator(key);
-                            this.store.put(key, this.message.getBody());
-                        }
+                        if (!canProcess() || key == null) return;
+                        String response = this.store.put(key, this.message.getBody());
+                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
                     }
                     case "GET" -> {
-                        if (!canProcess()) return;
-                        String response = this.store.get(header.get("Key"));
+                        if (!canProcess() || key == null) return;
+                        String response = this.store.get(key);
                         TcpMessager.sendMessage(this.socket, response);
                     }
                     case "DELETE" -> {
-                        TcpMessager.sendMessage(this.socket, Message.simpleMessage("ACK", ""));
-                        if (!canProcess() || from == null || key == null) return;
-                        var closestNode = this.store.getClosestMembershipInfo(key);
-                        boolean coordinator = closestNode.getKey().equals(this.store.getId());
-                        if (from.equals("client") && !coordinator) {
-                            this.store.redirectService(closestNode.getValue(), this.message.getMessage());
-                        } else {
-                            if (from.equals("client") && coordinator) this.store.addCoordinator(key);
-                            this.store.delete(key);
-                        }
+                        if (!canProcess() || key == null) return;
+                        String response = this.store.delete(key);
+                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
                     }
+                    case "REPLICA" -> {
+                        if (!canProcess() || key == null) return;
+                        String response = this.store.replica(key, this.message.getBody());
+                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
+                    }
+                    case "DEL_REPLICA" -> {
+                        if (!canProcess() || key == null) return;
+                        String response = this.store.delReplica(key);
+                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
+                    }
+
                     default -> System.out.println("Type not implemented");
                 }
             } else {

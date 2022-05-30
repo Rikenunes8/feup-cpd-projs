@@ -59,8 +59,12 @@ public class TestClient {
                 if (value == null) break;
                 String key = HashUtils.getHashedSha256(value);
                 if (key == null) break;
-                
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageClient.storeMessage("PUT", key, value));
+
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    TcpMessager.sendMessage(socket, MessageClient.putMessage(key, value));
+                    String response = TcpMessager.receiveMessage(socket);
+                    System.out.println(new MessageClient(response).getBody());
+                }
                 System.out.println(key);
             }
             case "get" -> {
@@ -72,7 +76,7 @@ public class TestClient {
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, MessageClient.storeMessage("GET", key));
+                    TcpMessager.sendMessage(socket, MessageClient.getMessage(key));
                     String value = TcpMessager.receiveMessage(socket);
                     System.out.println(value);
                 }
@@ -84,7 +88,11 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
-                TcpMessager.sendMessage(nodeIP, nodePort, MessageClient.storeMessage("DELETE", key));
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    TcpMessager.sendMessage(socket, MessageClient.deleteMessage(key));
+                    String response = TcpMessager.receiveMessage(socket);
+                    System.out.println(new MessageClient(response).getBody());
+                }
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }

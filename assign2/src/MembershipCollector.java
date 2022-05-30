@@ -50,8 +50,8 @@ public class MembershipCollector {
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
 
-        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
         store.mergeMembershipViews(membershipViews);
+        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
 
         System.out.println("Membership views synchronized"); // TODO DEBUG
     }
@@ -71,7 +71,7 @@ public class MembershipCollector {
             socket.close();
             return new AbstractMap.SimpleEntry<>(id, membershipView);
         }
-        catch (SocketTimeoutException e) { System.out.println("Timeout?!"); }
+        catch (SocketTimeoutException e) { System.out.println("Timeout occurred waiting for membership messages\n"); }
         catch (SocketException e) { System.out.println(e.getMessage()); }
         catch (IOException e) { throw new RuntimeException(); }
 

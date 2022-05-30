@@ -69,7 +69,7 @@ public class FileUtils {
             File keyFile = new File(STORAGE_ROOT + id + "/" + key + ".txt");
 
             if (!keyFile.exists()) {
-                System.out.println("In node " + id + " there doesn't exist any value associated with the key: " + key);
+                System.out.println("Node " + id + " doesn't have any value associated with the key: " + key);
                 return null;
             }
             if (!keyFile.canRead()){
@@ -97,7 +97,7 @@ public class FileUtils {
         File keyFile = new File(STORAGE_ROOT + id + "/" + key + ".txt");
 
         if (!keyFile.exists()) {
-            System.out.println("In node " + id + " there doesn't exist any value associated with the key: " + key);
+            System.out.println("Node " + id + " doesn't have any value associated with the key: " + key);
             return true;
         }
 

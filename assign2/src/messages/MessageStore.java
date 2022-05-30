@@ -41,27 +41,21 @@ public class MessageStore extends Message{
         return joinLeaveMessage(nodeID, nodeIP, storePort, null, membershipCounter);
     }
 
-    /**
-     * Creates a Store Message based on the parameters given, <b>should only be used with "PUT" operation</b>
-     * @param operation String with the operation to transmit, <b>should be "PUT"</b>
-     * @param key String with the key <b>NOT ENCODED</b>
-     * @param value String with the value associated with the key <b>NOT ENCODED</b>
-     * @return String with a header and body correctly formatted
-     */
-    public static String storeMessage(String operation, String key, String value) {
-        return storeMessage(operation, key, value, false);
+    public static String putMessage(String key, String value) {
+        return Message.putMessage(key, value);
     }
-
-    /**
-     * Creates a Store Message based on the parameters given, should be used with "GET" and "DELETE"
-     * @param operation String with the operation to transmit, could be "GET" or "DELETE"
-     * @param key String with the key <b>ENCODED</b>
-     * @return String with a header and body correctly formatted
-     */
-    public static String storeMessage(String operation, String key) {
-        return storeMessage(operation, key, null, false);
+    public static String getMessage(String key) {
+        return Message.getMessage(key);
     }
-
+    public static String deleteMessage(String key) {
+        return Message.deleteMessage(key);
+    }
+    public static String replicaMessage(String key, String value) {
+        return storeMessage("REPLICA", key, value);
+    }
+    public static String delReplicaMessage(String key) {
+        return storeMessage("DEL_REPLICA", key, null);
+    }
 
 
     /**

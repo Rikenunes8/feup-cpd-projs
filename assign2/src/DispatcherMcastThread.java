@@ -47,14 +47,14 @@ public class DispatcherMcastThread implements Runnable {
         this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
 
         if (this.store.getId().equals(nodeID)) return; // Must ignore a join message from itself
-        if (this.store.getAlreadySent().contains(nodeID)) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
-        this.store.getAlreadySent().add(nodeID);
+        if (nodeID.equals(this.store.getLastSent())) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
+        this.store.setLastSent(nodeID);
 
         Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
         String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
-        catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
+        catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
 
         transferOwnership(nodeID);
     }
@@ -75,27 +75,27 @@ public class DispatcherMcastThread implements Runnable {
     }
 
     private void transferOwnership(String nodeID) {
-        var keysCopy = new HashSet<>(this.store.getKeys().keySet());
+        if (this.store.getClusterSize() <= 1) return;
 
-        if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
-            keysCopy.forEach(key -> this.store.copyFile(key, nodeID));
-            return;
-        }
-
+        var keysCopy = new HashSet<>(this.store.getKeys());
         for (String key : keysCopy) {
-            var closestEntry = this.store.getClosestMembershipInfo(key);
-            var replications = this.store.getReplicationEntries(closestEntry);
-            replications.put(closestEntry.getKey(), closestEntry.getValue());
+            var preferenceList = this.store.getPreferenceList(key);
+            var preferenceListKeys = preferenceList.stream().map(Map.Entry::getKey).toList();
 
-            if (!replications.containsKey(nodeID) || replications.containsKey(this.store.getId()))
-                continue;
-
-            var next = closestEntry;
-            for (int i = 0; i < Store.REPLICATION_FACTOR; i++) {
-                next = this.store.getNextClosestMembershipInfo(next.getKey());
+            // If nodes are less than replication factor and this node was the closest before new node arrival copy file
+            if (preferenceList.size() <= Store.REPLICATION_FACTOR) {
+                var prevClosestNode = preferenceList.stream()
+                        .filter(entry -> !entry.getKey().equals(nodeID)).findFirst().get();
+                if (prevClosestNode.getKey().equals(this.store.getId()))
+                    this.store.transferFile(key, nodeID, false);
             }
-
-            if (next.getKey().equals(this.store.getId())) this.store.transferFile(key);
+            else {
+                if (!preferenceListKeys.contains(nodeID) || preferenceListKeys.contains(this.store.getId()))
+                    continue;
+                if (this.store.getKeys().contains(key) && !preferenceListKeys.contains(this.store.getId())) {
+                    this.store.transferFile(nodeID, key, true);
+                }
+            }
         }
     }
 }

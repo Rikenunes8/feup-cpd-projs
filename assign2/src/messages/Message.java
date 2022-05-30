@@ -4,10 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Message {
-    static final String PUT = "PUT";
-    static final String GET = "GET";
-    static final String DEL = "DELETE";
-
     String message;
     Map<String, String> header;
     String body;
@@ -18,16 +14,12 @@ public class Message {
     public String getBody() {
         return body;
     }
-    public String getMessage() {
+    public String getAllMessage() {
         return message;
     }
 
     public Message(String msg) {
         this.message = msg;
-        // TODO
-        System.out.println("\n--- MESSAGE ---");
-        System.out.println(msg); // DEBUG
-        System.out.println("--- END MESSAGE ---\n");
 
         String[] msgArr = msg.split("\n\n", 2);
 
@@ -41,18 +33,33 @@ public class Message {
         this.body = msgArr.length < 2 ?  "" : msgArr[1];
     }
 
-    protected static String storeMessage(String operation, String key, String value, boolean client) {
+    /**
+     * Creates a Store Message based on the parameters given, <b>should only be used with "PUT" operation</b>
+     * @param operation String with the operation to transmit, <b>should be "PUT"</b>
+     * @param key String with the key <b>NOT ENCODED</b>
+     * @param value String with the value associated with the key <b>NOT ENCODED</b>
+     * @return String with a header and body correctly formatted
+     */
+    protected static String storeMessage(String operation, String key, String value) {
         // BODY
-        String body = operation.equalsIgnoreCase(PUT) ? value : "";
+        String body = value != null ? value : "";
 
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
         headerLines.put("Type", operation);
         headerLines.put("Key", key);
         headerLines.put("BodySize", String.valueOf(body.length()));
-        headerLines.put("From", client ? "client" : "store");
 
         return buildHeader(headerLines) + body;
+    }
+    protected static String putMessage(String key, String value) {
+        return storeMessage("PUT", key, value);
+    }
+    protected static String getMessage(String key) {
+        return storeMessage("GET", key, null);
+    }
+    protected static String deleteMessage(String key) {
+        return storeMessage("DELETE", key, null);
     }
 
 
@@ -63,6 +70,10 @@ public class Message {
         headerLines.put("BodySize", String.valueOf(arg.length()));
 
         return buildHeader(headerLines) + arg;
+    }
+
+    public static String ackMessage(String body) {
+        return simpleMessage("ACK", body);
     }
 
     /**
