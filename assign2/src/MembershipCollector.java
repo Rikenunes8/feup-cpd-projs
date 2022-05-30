@@ -20,7 +20,7 @@ public class MembershipCollector {
 
     public static void collect(ServerSocket serverSocket, Store store) {
         final ConcurrentHashMap<String, MembershipView> membershipViews = new ConcurrentHashMap<>();
-        System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
+        System.out.println("Listening to Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
         String msg = MessageStore.joinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());

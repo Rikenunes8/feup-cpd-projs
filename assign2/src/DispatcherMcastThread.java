@@ -69,33 +69,21 @@ public class DispatcherMcastThread implements Runnable {
     }
 
     private void membershipHandler(MessageStore message) {
-        System.out.println("Multicast Membership Message received");
+        System.out.println("Receive membership message from " + message.getHeader().get("NodeID"));
         MembershipView view = parseMembershipMessage(message);
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
     }
 
     private void transferOwnership(String nodeID) {
         if (this.store.getClusterSize() <= 1) return;
-        System.out.println("\n------ DEBUG -------");
-        System.out.println(this.store.getClusterSize());
-        System.out.println(this.store.getMembershipView().getMembershipTable().toString());
-        System.out.println("--------------------");
-        System.out.println(this.store.getMembershipView().getMembershipLog().toString());
         var keysCopy = new HashSet<>(this.store.getKeys());
         for (String key : keysCopy) {
             var preferenceList = this.store.getPreferenceList(key);
-            System.out.println("Listing...");
-            for (String i : preferenceList) {
-                System.out.println(i);
-            }
-            System.out.println("End listing");
-            System.out.println("size: " + preferenceList.size());
             // If nodes are less than replication factor and this node was the closest before new node arrival copy file
             if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
                 var prevClosestNode = preferenceList.stream()
                         .filter(nodeKey -> !nodeKey.equals(nodeID)).findFirst().get();
                 if (prevClosestNode.equals(this.store.getId())) {
-                    System.out.println("Transferring and keeping");
                     this.store.transfer(nodeID, key, false);
                 }
             }
@@ -103,12 +91,9 @@ public class DispatcherMcastThread implements Runnable {
                 if (!preferenceList.contains(nodeID) || preferenceList.contains(this.store.getId()))
                     continue;
                 if (this.store.getKeys().contains(key) && !preferenceList.contains(this.store.getId())) {
-                    System.out.println("Transferring and deleting");
                     this.store.transfer(nodeID, key, true);
                 }
             }
         }
-        System.out.println("------ END DEBUG -------\n");
-
     }
 }

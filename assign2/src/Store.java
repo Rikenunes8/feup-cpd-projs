@@ -96,7 +96,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
-        System.out.println("ID: " + id); // TODO DEBUG
+        System.out.println("ID: " + id);
         FileUtils.createRoot();
         FileUtils.createDirectory(this.id);
 
@@ -112,7 +112,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             if (this.networkInterface != null) {
                 this.sndDatagramSocket.setOption(StandardSocketOptions.IP_MULTICAST_IF, this.networkInterface);
             }
-            System.out.println("IP_MULTICAST_LOOP: " + this.sndDatagramSocket.getOption(StandardSocketOptions.IP_MULTICAST_LOOP));
+            // System.out.println("IP_MULTICAST_LOOP: " + this.sndDatagramSocket.getOption(StandardSocketOptions.IP_MULTICAST_LOOP)); // TODO
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -145,7 +145,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 this.removeFromPendingQueue().processMessage();
             }
         } catch (Exception e) {
-            System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
+            System.out.println("Failure joining multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
         }
         return true;
@@ -175,9 +175,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             endMcastReceiver();
         } catch (Exception e) {
-            System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
-            System.out.println(e);
-            throw new RuntimeException(e);
+            System.out.println("Failure leaving " + this.mcastAddr + ":" + this.mcastPort);
+            System.out.println(e.getMessage());
         }
         return true;
     }
@@ -229,7 +228,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         boolean smaller = !infoMap.isEmpty() && id.equals(infoMap.firstKey());
 
         if (this.executorTimerTask == null && smaller) {
-            System.out.println("Alarm setted");
+            System.out.println("Alarm set");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
             this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.SECONDS);
         }
