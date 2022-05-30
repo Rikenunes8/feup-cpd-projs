@@ -164,9 +164,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             var keysCopy = new HashSet<>(this.keys);
             for (String key : keysCopy) {
-                var preferenceList = getPreferenceList(key);
-                if (preferenceList.size() < REPLICATION_FACTOR) continue;
-                this.transferFile(preferenceList.get(REPLICATION_FACTOR).getKey(), key, true);
+                var preferenceList = this.getPreferenceList(key);
+                if (preferenceList.size() < REPLICATION_FACTOR) this.delReplica(key);
+                else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
             }
 
             // Notice cluster members of my leave
@@ -282,9 +282,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
         var preferenceList = getPreferenceList(key);
         String requestMessage = MessageStore.getMessage(key);
-        for (var nodeEntry : preferenceList) {
-            if (nodeEntry.getKey().equals(this.id)) continue;
-            MembershipInfo node = nodeEntry.getValue();
+        for (var nodeKey : preferenceList) {
+            if (nodeKey.equals(this.id)) continue;
+            MembershipInfo node = this.getMembershipInfo(nodeKey);
             try (Socket socket = new Socket(node.getIP(), node.getPort())) {
                 TcpMessager.sendMessage(socket, requestMessage);
                 socket.setSoTimeout(2000);
@@ -304,6 +304,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
         if (this.keys.contains(key)) {
             if (!FileUtils.deleteFile(this.id, key)) {
+                this.keys.remove(key);
                 return ackMessage("FAILURE - Couldn't delete the file");
             }
             this.keys.remove(key);
@@ -311,8 +312,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             // TODO This must be in a thread
             for (var replica : this.getPreferenceList(key)) {
-                if (replica.getKey().equals(this.id)) continue;
-                String resp = this.redirectService(replica.getValue(), MessageStore.delReplicaMessage(key));
+                if (replica.equals(this.id)) continue;
+                String resp = this.redirectService(this.getMembershipInfo(replica), MessageStore.delReplicaMessage(key));
             }
         }
         else {
@@ -337,7 +338,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         return ackMessage("FAILURE - Couldn't delete the file");
     }
 
-    public void transferFile(String nodeID, String key, boolean delete) {
+    public void transfer(String nodeID, String key, boolean delete) {
         String value = FileUtils.getFile(this.id, key);
         if (value == null) return;
         String response = this.redirectService(getMembershipInfo(nodeID), MessageStore.replicaMessage(key, value));
@@ -413,14 +414,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getNextClosestMembershipInfo(keyHashed);
     }
-    public List<Map.Entry<String, MembershipInfo>> getPreferenceList(String key) {
-        List<Map.Entry<String, MembershipInfo>> preferenceList = new ArrayList<>();
+    public List<String> getPreferenceList(String key) {
+        List<String> preferenceList = new ArrayList<>();
         var closestEntry = this.getClosestMembershipInfo(key);
         if (closestEntry == null) return preferenceList;
-        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
+        String closestKey = closestEntry.getKey();
+        preferenceList.add(closestKey);
+        String lastEntry = closestKey;
         for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
-            lastEntry = this.getNextClosestMembershipInfo(lastEntry.getKey());
-            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
+            lastEntry = this.getNextClosestMembershipInfo(lastEntry).getKey();
+            if (lastEntry.equals(closestKey)) break;
             preferenceList.add(lastEntry);
         }
         return preferenceList;
@@ -467,7 +470,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
 
     public void saveLogs(){
-        FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
+        FileUtils.saveFile(this.id, "membershipLogs_", this.membershipView.getMembershipLog().toString());
     }
 
     public void loadLogs(){

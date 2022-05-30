@@ -78,7 +78,7 @@ public class TestClient {
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
                     TcpMessager.sendMessage(socket, MessageClient.getMessage(key));
                     String value = TcpMessager.receiveMessage(socket);
-                    System.out.println(value);
+                    System.out.println(new MessageClient(value).getBody());
                 }
             }
             case "delete" -> {
