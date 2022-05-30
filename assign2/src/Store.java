@@ -3,6 +3,7 @@ import membership.*;
 import static messages.Message.ackMessage;
 import static messages.MulticastMessager.*;
 import static messages.MessageStore.leaveMessage;
+import static utils.FileUtils.sub;
 
 import messages.MessageStore;
 import messages.TcpMessager;
@@ -342,6 +343,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         if (value == null) return;
         String response = this.redirectService(getMembershipInfo(nodeID), MessageStore.replicaMessage(key, value));
         if (delete) FileUtils.deleteFile(this.id, key);
+        System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
 
     public String redirectService(MembershipInfo node, String requestMessage) {
