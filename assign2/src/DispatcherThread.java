@@ -41,19 +41,19 @@ public class DispatcherThread implements Runnable {
                         if (canProcess()) {
                             response = this.store.put(key, this.message.getBody());
                             TcpMessager.sendMessage(this.socket, response);
-                        }
+                        } else {return;}
                     }
                     case "GET" -> {
                         if (canProcess()) {
                             response = this.store.get(key);
                             TcpMessager.sendMessage(this.socket, response);
-                        }
+                        } else {return;}
                     }
                     case "DELETE" -> {
                         if (canProcess()) {
                             response = this.store.delete(key);
                             TcpMessager.sendMessage(this.socket, response);
-                        }
+                        } else {return;}
                     }
                     case "REPLICA_PUT" -> {
                         if (store.isOnline())
@@ -70,7 +70,6 @@ public class DispatcherThread implements Runnable {
                             response = this.store.replicaGet(key);
                         TcpMessager.sendMessage(this.socket, response);
                     }
-
                     default -> System.out.println("Type not implemented");
                 }
             } else {
