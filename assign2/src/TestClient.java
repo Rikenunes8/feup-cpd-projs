@@ -65,7 +65,7 @@ public class TestClient {
                     String response = TcpMessager.receiveMessage(socket);
                     System.out.println(new MessageClient(response).getBody());
                 }
-                System.out.println(key);
+                System.out.println("\nKey: " + key);
             }
             case "get" -> {
                 if (args.length != 3) {
@@ -78,6 +78,7 @@ public class TestClient {
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
                     TcpMessager.sendMessage(socket, MessageClient.getMessage(key));
                     String value = TcpMessager.receiveMessage(socket);
+                    System.out.println("\n\nValue:\n");
                     System.out.println(new MessageClient(value).getBody());
                 }
             }
