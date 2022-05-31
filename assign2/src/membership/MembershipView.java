@@ -65,4 +65,9 @@ public class MembershipView {
 
         this.membershipLog.addMembershipInfo(new MembershipLogRecord(id, membershipCounter));
     }
+
+    @Override
+    public String toString() {
+        return "+----\n" + this.getMembershipTable().toString() + "-----\n" + this.getMembershipLog().toString() + "+-----\n";
+    }
 }

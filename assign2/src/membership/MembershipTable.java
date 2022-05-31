@@ -22,6 +22,11 @@ public class MembershipTable {
         return this.membershipInfoMap;
     }
 
+    public String getSmallestMembershipNode() {
+        try { return this.membershipInfoMap.firstKey(); }
+        catch (NoSuchElementException e) { return null; }
+    }
+
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String key) {
         if (this.membershipInfoMap.isEmpty()) return null;
         Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key); // Binary Search to find the closest node

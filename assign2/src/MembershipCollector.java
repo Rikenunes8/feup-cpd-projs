@@ -56,6 +56,31 @@ public class MembershipCollector {
         System.out.println("Membership views synchronized"); // TODO DEBUG
     }
 
+    public static void collectLight(ServerSocket serverSocket, Store store) {
+        final ConcurrentHashMap<String, MembershipView> membershipViews = new ConcurrentHashMap<>();
+        System.out.println("Listening to Membership messages on port " + serverSocket.getLocalPort());
+
+        // Notice cluster members of my join
+        String msg = MessageStore.rejoinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
+        try {sendMcastMessage(msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());}
+        catch (IOException ex) {throw new RuntimeException(ex);}
+        do {
+            var entry = membershipReaderTask(serverSocket);
+            if (entry != null) membershipViews.put(entry.getKey(), entry.getValue());
+            else { break; }
+        } while (membershipViews.size() < MAX_MS_MSG);
+
+        try {serverSocket.close();}
+        catch (IOException e) {throw new RuntimeException(e);}
+
+        System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
+
+        store.mergeMembershipViews(membershipViews);
+        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+
+        System.out.println("Membership views synchronized"); // TODO DEBUG
+    }
+
     private static Map.Entry<String, MembershipView> membershipReaderTask(ServerSocket serverSocket) {
         try {
             serverSocket.setSoTimeout(TIMEOUT);

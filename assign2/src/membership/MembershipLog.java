@@ -2,6 +2,7 @@ package membership;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class MembershipLog {
     private final List<MembershipLogRecord> logs;
@@ -49,6 +50,23 @@ public class MembershipLog {
             return this.logs.get(this.logs.size()-1) != oldMembershipLog.logs.get(oldMembershipLog.logs.size()-1);
         else
             return !(this.logs.isEmpty() && oldMembershipLog.logs.isEmpty());
+    }
+
+    public List<MembershipLogRecord> changes(MembershipLog oldMembershipLog) {
+        List<MembershipLogRecord> changesList = new ArrayList<>();
+        int size1 = this.logs.size();
+        int size2 = oldMembershipLog.logs.size();
+        if (size2 == 0) {
+            changesList.addAll(this.logs);
+            return changesList;
+        }
+        int i = 1;
+        // Assuming size2 can't be greater than size1
+        while (size2-i >= 0 && !this.logs.get(size1-i).equals(oldMembershipLog.logs.get(size2-i))) {
+            changesList.add(this.logs.get(size1-i));
+            i++;
+        }
+        return changesList;
     }
 
 

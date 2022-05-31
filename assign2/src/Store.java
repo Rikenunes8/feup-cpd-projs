@@ -21,8 +21,8 @@ import java.util.*;
 
 
 public class Store extends UnicastRemoteObject implements IMembership, IService {
-    private static final int ALARM_PERIOD = 10;
-    public static final int REPLICATION_FACTOR = 3;
+    public static final int ALARM_PERIOD = 10000; // Milliseconds
+    public static final int REPLICATION_FACTOR = 3; // Including coordinator
 
     private final InetAddress mcastAddr;
     private final int mcastPort;
@@ -35,6 +35,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final MembershipView membershipView;
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
     private String lastSent;
+    private String smallestOnline;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -42,7 +43,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private DatagramSocket rcvDatagramSocket;
 
     private Future<?> listenerMcastFuture;
-    private ExecutorService executor;
+    private final ExecutorService executor;
     private ScheduledExecutorService executorTimerTask;
 
     public static void main(String[] args) throws RemoteException {
@@ -114,7 +115,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             if (this.networkInterface != null) {
                 this.sndDatagramSocket.setOption(StandardSocketOptions.IP_MULTICAST_IF, this.networkInterface);
             }
-            // System.out.println("IP_MULTICAST_LOOP: " + this.sndDatagramSocket.getOption(StandardSocketOptions.IP_MULTICAST_LOOP)); // TODO
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -143,6 +143,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             initMcastReceiver();
             this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
+            this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
+
             while (!this.isEmptyPendingQueue()) {
                 this.removeFromPendingQueue().processMessage();
             }
@@ -163,13 +165,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.incrementMSCounter();
             this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
 
-
-            var keysCopy = new HashSet<>(this.keys);
-            for (String key : keysCopy) {
-                var preferenceList = this.getPreferenceList(key);
-                if (preferenceList.size() < REPLICATION_FACTOR) this.delReplica(key);
-                else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
-            }
+            transferOwnershipOnLeave();
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
@@ -182,6 +178,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         return true;
     }
+
 
     private void initMcastReceiver() throws IOException {
         this.rcvDatagramSocket = new DatagramSocket(null);
@@ -196,9 +193,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
     private void joinAfterCrash() {
         try {
-            this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
+            ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+            MembershipCollector.collectLight(serverSocket, this);
             initMcastReceiver();
-            this.executor.execute(new ListenerMcastThread(this));
+            this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
+
+            this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
         }
         catch (IOException e) {throw new RuntimeException(e);}
     }
@@ -206,34 +206,40 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
-        posUpdate(oldLogs);
+        posUpdate(oldLogs, true);
     }
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
-        posUpdate(oldLogs);
+        posUpdate(oldLogs, false);
+        this.timerTask();
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
-        posUpdate(oldLogs);
+        posUpdate(oldLogs, false);
     }
-    private void posUpdate(List<MembershipLogRecord> oldLogs) {
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) {
+    private void posUpdate(List<MembershipLogRecord> oldLogs, boolean membership) {
+        System.out.println(this.getMembershipView());
+        var changes = this.membershipView.getMembershipLog().changes(new MembershipLog(oldLogs));
+        if (!changes.isEmpty()) {
+            if (membership) {
+                System.out.println("Transferring ownership on membership message");
+                System.out.println(changes);
+                for (var record : changes) if (record.getCounter() % 2 == 0) this.transferOwnershipOnJoin(record.getNodeID());
+            }
             this.lastSent = null;
             this.saveLogs();
         }
-        timerTask();
     }
-    private void timerTask() {
-        // Compare hashedID with the smaller hashedID in the cluster view
-        var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
-        boolean smaller = !infoMap.isEmpty() && id.equals(infoMap.firstKey());
+    public void timerTask() {
+        // Compare hashedID with the smaller hashedID online in the cluster view
+        boolean smaller = this.isOnline() && id.equals(this.smallestOnline);
 
         if (this.executorTimerTask == null && smaller) {
             System.out.println("Alarm set");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.SECONDS);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.MILLISECONDS);
         }
         else if (this.executorTimerTask != null && !smaller) {
             System.out.println("Alarm canceled");
@@ -356,6 +362,37 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         return null;
     }
 
+    public void transferOwnershipOnLeave() {
+        var keysCopy = new HashSet<>(this.keys);
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            if (preferenceList.size() < REPLICATION_FACTOR) this.delReplica(key);
+            else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
+        }
+    }
+    public void transferOwnershipOnJoin(String nodeID) {
+        if (this.getClusterSize() <= 1) return;
+        var keysCopy = new HashSet<>(this.getKeys());
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            // If nodes are less than replication factor and this node was the closest before new node arrival copy file
+            if (this.getClusterSize() <= REPLICATION_FACTOR) {
+                var prevClosestNode = preferenceList.stream()
+                        .filter(nodeKey -> !nodeKey.equals(nodeID)).findFirst().get();
+                if (prevClosestNode.equals(this.id)) {
+                    this.transfer(nodeID, key, false);
+                }
+            }
+            else {
+                if (!preferenceList.contains(nodeID) || preferenceList.contains(this.id))
+                    continue;
+                if (this.keys.contains(key) && !preferenceList.contains(this.id)) {
+                    this.transfer(nodeID, key, true);
+                }
+            }
+        }
+    }
+
     // ---------- END OF SERVICE PROTOCOL ---------------
 
     // -------------- GETS AND SETS ---------------------
@@ -419,6 +456,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getClosestMembershipInfo(keyHashed);
     }
+    public String getSmallestMembershipNode() {
+        return this.membershipView.getMembershipTable().getSmallestMembershipNode();
+    }
 
     public void setLastSent(String nodeID) {
         this.lastSent = nodeID;
@@ -477,4 +517,17 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 .map(name -> name.split("\\.")[0]).toList();
         this.keys.addAll(fileKeys);
     }
+
+    public void selectAlarmer(boolean increment, String nodeID) {
+        if (nodeID != null) {
+            smallestOnline = nodeID;
+        } else if (increment) {
+            smallestOnline = this.membershipView.getMembershipTable()
+                    .getNextClosestMembershipInfo(smallestOnline).getKey();
+        } else {
+            smallestOnline = this.membershipView.getMembershipTable().getSmallestMembershipNode();
+        }
+        timerTask();
+    }
+
 }

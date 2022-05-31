@@ -19,10 +19,10 @@ public class MessageStore extends Message{
      *                          it's a <b>join</b> message, <b>odd</b> values mean it's a <b>leave</b> message
      * @return String containing only a header correctly formatted
      */
-    private static String joinLeaveMessage(String nodeID, String nodeIP, int port, Integer msPort, int msCounter) {
+    private static String joinLeaveMessage(String nodeID, String nodeIP, int port, Integer msPort, int msCounter, String type) {
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
-        headerLines.put("Type", msCounter % 2 == 0 ? "JOIN" : "LEAVE");
+        headerLines.put("Type", type);
         headerLines.put("NodeID", nodeID);
         headerLines.put("NodeIP", nodeIP);
         headerLines.put("StorePort", String.valueOf(port));
@@ -35,10 +35,13 @@ public class MessageStore extends Message{
     }
 
     public static String joinMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter);
+        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter, "JOIN");
     }
     public static String leaveMessage(String nodeID, String nodeIP, int storePort, int membershipCounter) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, null, membershipCounter);
+        return joinLeaveMessage(nodeID, nodeIP, storePort, null, membershipCounter, "LEAVE");
+    }
+    public static String rejoinMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort) {
+        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter, "REJOIN");
     }
 
     public static String putMessage(String key, String value) {
