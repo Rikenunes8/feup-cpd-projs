@@ -29,6 +29,7 @@ public class DispatcherThread implements Runnable {
 
     public void processMessage() {
         try {
+            String response = MessageStore.ackMessage("FAILURE - Not online");
             Map<String, String> header = this.message.getHeader();
             var type = header.getOrDefault("Type", null);
             var key = header.getOrDefault("Key", null);
@@ -37,29 +38,37 @@ public class DispatcherThread implements Runnable {
                     case "JOIN" -> this.store.join();
                     case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
-                        if (!canProcess() || key == null) return;
-                        String response = this.store.put(key, this.message.getBody());
-                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
+                        if (canProcess()) {
+                            response = this.store.put(key, this.message.getBody());
+                            TcpMessager.sendMessage(this.socket, response);
+                        }
                     }
                     case "GET" -> {
-                        if (!canProcess() || key == null) return;
-                        String response = this.store.get(key);
-                        TcpMessager.sendMessage(this.socket, response);
+                        if (canProcess()) {
+                            response = this.store.get(key);
+                            TcpMessager.sendMessage(this.socket, response);
+                        }
                     }
                     case "DELETE" -> {
-                        if (!canProcess() || key == null) return;
-                        String response = this.store.delete(key);
-                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
+                        if (canProcess()) {
+                            response = this.store.delete(key);
+                            TcpMessager.sendMessage(this.socket, response);
+                        }
                     }
-                    case "REPLICA" -> {
-                        if (!canProcess() || key == null) return;
-                        String response = this.store.replica(key, this.message.getBody());
-                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
+                    case "REPLICA_PUT" -> {
+                        if (store.isOnline())
+                            response = this.store.replicaPut(key, this.message.getBody());
+                        TcpMessager.sendMessage(this.socket, response);
                     }
-                    case "DEL_REPLICA" -> {
-                        if (!canProcess() || key == null) return;
-                        String response = this.store.delReplica(key);
-                        TcpMessager.sendMessage(this.socket, Message.ackMessage(new MessageStore(response).getBody()));
+                    case "REPLICA_DEL" -> {
+                        if (store.isOnline())
+                            response = this.store.replicaDel(key);
+                        TcpMessager.sendMessage(this.socket, response);
+                    }
+                    case "REPLICA_GET" -> {
+                        if (store.isOnline())
+                            response = this.store.replicaGet(key);
+                        TcpMessager.sendMessage(this.socket, response);
                     }
 
                     default -> System.out.println("Type not implemented");
@@ -69,7 +78,7 @@ public class DispatcherThread implements Runnable {
             }
             this.socket.close();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            System.out.println(e.getMessage());
         }
     }
 

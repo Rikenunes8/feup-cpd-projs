@@ -258,10 +258,11 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public String put(String key, String value) {
+        if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
+
         String response;
         var closestNode = this.getClosestMembershipInfo(key);
         var preferenceList = this.getPreferenceList(key);
-
         if (closestNode.getKey().equals(this.id)) {
             if (FileUtils.saveFile(this.id, key, value)) {
                 this.keys.add(key);
@@ -271,7 +272,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 return ackMessage("FAILURE - Couldn't save the file");
             }
 
-            String replicaMessage = MessageStore.replicaMessage(key, value);
+            String replicaMessage = MessageStore.replicaPutMessage(key, value);
             for (var replica : preferenceList) {
                 if (replica.equals(this.id)) continue;
                 this.executor.execute(new OperationReplicatorThread(this, replica, replicaMessage));
@@ -285,12 +286,13 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public String get(String key) {
+        if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
         if (this.keys.contains(key)) {
             return ackMessage(FileUtils.getFile(this.id, key));
         }
 
         var preferenceList = getPreferenceList(key);
-        String requestMessage = MessageStore.getMessage(key);
+        String requestMessage = MessageStore.replicaGetMessage(key);
         for (var nodeKey : preferenceList) {
             if (nodeKey.equals(this.id)) continue;
             MembershipInfo node = this.getMembershipInfo(nodeKey);
@@ -308,6 +310,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public String delete(String key) {
+        if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
         String response;
         var closestNode = this.getClosestMembershipInfo(key);
         var preferenceList = this.getPreferenceList(key);
@@ -322,7 +325,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.keys.remove(key);
             response = ackMessage("SUCCESS");
 
-            String delReplicaMessage = MessageStore.delReplicaMessage(key);
+            String delReplicaMessage = MessageStore.replicaDelMessage(key);
             for (var replica : preferenceList) {
                 if (replica.equals(this.id)) continue;
                 this.executor.execute(new OperationReplicatorThread(this, replica, delReplicaMessage));
@@ -334,14 +337,14 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         return response;
     }
 
-    public String replica(String key, String value) {
+    public String replicaPut(String key, String value) {
         if (FileUtils.saveFile(this.id, key, value)) {
             this.keys.add(key);
             return ackMessage("SUCCESS");
         }
         return ackMessage("FAILURE - Couldn't save the file");
     }
-    public String delReplica(String key) {
+    public String replicaDel(String key) {
         if (!this.keys.contains(key)) return ackMessage("Not exists");
         if (FileUtils.deleteFile(this.id, key)) {
             this.keys.remove(key);
@@ -349,11 +352,17 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         return ackMessage("FAILURE - Couldn't delete the file");
     }
+    public String replicaGet(String key) {
+        if (this.keys.contains(key)) {
+            return ackMessage(FileUtils.getFile(this.id, key));
+        }
+        return ackMessage("FAILURE - Couldn't find the file required");
+    }
 
     public void transfer(String nodeID, String key, boolean delete) {
         String value = FileUtils.getFile(this.id, key);
         if (value == null) return;
-        String response = this.redirect(getMembershipInfo(nodeID), MessageStore.replicaMessage(key, value));
+        String response = this.redirect(getMembershipInfo(nodeID), MessageStore.replicaPutMessage(key, value));
         if (delete) FileUtils.deleteFile(this.id, key);
         System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
@@ -369,7 +378,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         var keysCopy = new HashSet<>(this.keys);
         for (String key : keysCopy) {
             var preferenceList = this.getPreferenceList(key);
-            if (preferenceList.size() < REPLICATION_FACTOR) this.delReplica(key);
+            if (preferenceList.size() < REPLICATION_FACTOR) this.replicaDel(key);
             else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
         }
     }

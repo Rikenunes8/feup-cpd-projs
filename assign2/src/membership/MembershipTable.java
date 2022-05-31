@@ -28,7 +28,7 @@ public class MembershipTable {
     }
 
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String key) {
-        if (this.membershipInfoMap.isEmpty()) return null;
+        if (this.membershipInfoMap.isEmpty() || key == null) return null;
         Map.Entry<String, MembershipInfo> closestNode = this.membershipInfoMap.ceilingEntry(key); // Binary Search to find the closest node
 
         // the key is after the last hashedId in the tree

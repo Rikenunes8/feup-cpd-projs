@@ -53,12 +53,16 @@ public class MessageStore extends Message{
     public static String deleteMessage(String key) {
         return Message.deleteMessage(key);
     }
-    public static String replicaMessage(String key, String value) {
-        return storeMessage("REPLICA", key, value);
+    public static String replicaPutMessage(String key, String value) {
+        return storeMessage("REPLICA_PUT", key, value);
     }
-    public static String delReplicaMessage(String key) {
-        return storeMessage("DEL_REPLICA", key, null);
+    public static String replicaDelMessage(String key) {
+        return storeMessage("REPLICA_DEL", key, null);
     }
+    public static String replicaGetMessage(String key) {
+        return storeMessage("REPLICA_GET", key, null);
+    }
+
 
 
     /**
