@@ -1,13 +1,12 @@
 import membership.MembershipView;
-import messages.Message;
+import messages.MessageStore;
 import messages.TcpMessager;
 
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
 
-import static messages.Message.parseMembershipMessage;
+import static messages.MessageStore.parseMembershipMessage;
 
 public class DispatcherMcastThread implements Runnable {
     private final int MAX_WAIT = 500;
@@ -22,18 +21,34 @@ public class DispatcherMcastThread implements Runnable {
 
     @Override
     public void run() {
-        Message message = new Message(this.msgString);
+        MessageStore message = new MessageStore(this.msgString);
         try {
             Map<String, String> header = message.getHeader();
             switch (header.get("Type")) {
                 case "JOIN" -> this.joinHandler(header);
                 case "LEAVE" -> this.leaveHandler(header);
                 case "MEMBERSHIP" -> this.membershipHandler(message);
+                case "REJOIN" -> this.rejoinHandler(header);
                 default -> System.out.println("Type case not implemented");
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            System.out.println("Error: " + e.getMessage());
         }
+    }
+
+    private void rejoinHandler(Map<String, String> header) throws InterruptedException {
+        System.out.println("Received rejoin message from " + header.get("NodeIP"));
+        String nodeID = header.get("NodeID");
+        String nodeIP = header.get("NodeIP");
+        int msPort    = Integer.parseInt(header.get("MembershipPort"));
+
+        if (this.store.getId().equals(nodeID)) return; // Must ignore a rejoin message from itself
+
+        Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
+
+        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
+        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
+        catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
     }
 
     private void joinHandler(Map<String, String> header) throws InterruptedException {
@@ -47,16 +62,16 @@ public class DispatcherMcastThread implements Runnable {
         this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
 
         if (this.store.getId().equals(nodeID)) return; // Must ignore a join message from itself
-        if (this.store.getAlreadySent().contains(nodeID)) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
-        this.store.getAlreadySent().add(nodeID);
+        if (nodeID.equals(this.store.getLastSent())) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
+        this.store.setLastSent(nodeID);
 
         Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
-        String msMsg = Message.membershipMessage(this.store.getId(), this.store.getMembershipView());
+        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
-        catch (IOException e) { System.out.println("ERROR: " + e.getMessage()); }
+        catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
 
-        transferOwnership(nodeID);
+        this.store.transferOwnershipOnJoin(nodeID);
     }
 
     private void leaveHandler(Map<String, String> header) {
@@ -68,34 +83,12 @@ public class DispatcherMcastThread implements Runnable {
         this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
     }
 
-    private void membershipHandler(Message message) {
-        System.out.println("Multicast Membership Message received");
+    private void membershipHandler(MessageStore message) {
+        String nodeId = message.getHeader().get("NodeID");
+        System.out.println("Receive membership message from " + nodeId);
         MembershipView view = parseMembershipMessage(message);
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
-    }
 
-    private void transferOwnership(String nodeID) {
-        var keysCopy = new HashSet<>(this.store.getKeys());
-
-        if (this.store.getClusterSize() <= Store.REPLICATION_FACTOR) {
-            keysCopy.forEach(key -> this.store.copyFile(key, nodeID));
-            return;
-        }
-
-        for (String key : keysCopy) {
-            var closestEntry = this.store.getClosestMembershipInfo(key);
-            var replications = this.store.getReplicationEntries(closestEntry);
-            replications.put(closestEntry.getKey(), closestEntry.getValue());
-
-            if (!replications.containsKey(nodeID) || replications.containsKey(this.store.getId()))
-                continue;
-
-            var next = closestEntry;
-            for (int i = 0; i < Store.REPLICATION_FACTOR; i++) {
-                next = this.store.getNextClosestMembershipInfo(next.getKey());
-            }
-
-            if (next.getKey().equals(this.store.getId())) this.store.transferFile(key);
-        }
+        this.store.selectAlarmer(false, nodeId);
     }
 }

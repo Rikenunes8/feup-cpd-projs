@@ -17,7 +17,7 @@ public class MulticastMessager {
         if (msg == null) return;
         byte[] sndBuffer = msg.getBytes();
         DatagramPacket sndPacket = new DatagramPacket(sndBuffer, sndBuffer.length, mcastAddr, mcastPort);
-        System.out.println("Sending mcast message to " + mcastAddr + ":" + mcastPort);
+        System.out.println("\nSending multicast message to " + mcastAddr + ":" + mcastPort);
         datagramSocket.send(sndPacket);
     }
 }

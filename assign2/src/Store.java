@@ -1,8 +1,11 @@
 import membership.*;
 
+import static messages.Message.ackMessage;
 import static messages.MulticastMessager.*;
-import static messages.Message.leaveMessage;
-import messages.Message;
+import static messages.MessageStore.leaveMessage;
+import static utils.FileUtils.sub;
+
+import messages.MessageStore;
 import messages.TcpMessager;
 import utils.FileUtils;
 import utils.HashUtils;
@@ -18,8 +21,8 @@ import java.util.*;
 
 
 public class Store extends UnicastRemoteObject implements IMembership, IService {
-    private static final int ALARM_PERIOD = 10;
-    public static final int REPLICATION_FACTOR = 3;
+    public static final int ALARM_PERIOD = 10000; // Milliseconds
+    public static final int REPLICATION_FACTOR = 3; // Including coordinator
 
     private final InetAddress mcastAddr;
     private final int mcastPort;
@@ -31,7 +34,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private int membershipCounter;
     private final MembershipView membershipView;
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
-    private final Set<String> alreadySent; // TODO could this be a String instead of Set??
+    private String lastSent;
+    private String smallestOnline;
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -39,7 +43,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private DatagramSocket rcvDatagramSocket;
 
     private Future<?> listenerMcastFuture;
-    private ExecutorService executor;
+    private final ExecutorService executor;
     private ScheduledExecutorService executorTimerTask;
 
     public static void main(String[] args) throws RemoteException {
@@ -91,16 +95,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
         this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
-        this.alreadySent = Collections.synchronizedSet(new HashSet<>());
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
-        System.out.println("ID: " + id); // TODO DEBUG
+        System.out.println("ID: " + id);
         FileUtils.createRoot();
         FileUtils.createDirectory(this.id);
 
         this.startMSCounter();
         this.loadLogs();
+        this.loadKeys();
 
         String networkInterfaceStr = "loopback"; // TODO
         try {
@@ -111,7 +115,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             if (this.networkInterface != null) {
                 this.sndDatagramSocket.setOption(StandardSocketOptions.IP_MULTICAST_IF, this.networkInterface);
             }
-            System.out.println("IP_MULTICAST_LOOP: " + this.sndDatagramSocket.getOption(StandardSocketOptions.IP_MULTICAST_LOOP));
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -120,13 +123,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
 
         // If the store went down due to a crash then automatically join on start up
-        if (this.membershipCounter % 2 == 0) {
-            try {
-                initMcastReceiver();
-                this.executor.execute(new ListenerMcastThread(this));
-            }
-            catch (IOException e) {throw new RuntimeException(e);}
-        }
+        if (this.membershipCounter % 2 == 0) this.joinAfterCrash();
     }
 
 
@@ -146,11 +143,13 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             initMcastReceiver();
             this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
+            this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
+
             while (!this.isEmptyPendingQueue()) {
                 this.removeFromPendingQueue().processMessage();
             }
         } catch (Exception e) {
-            System.out.println("Failure to join multicast group " + this.mcastAddr + ":" + this.mcastPort);
+            System.out.println("Failure joining multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
         }
         return true;
@@ -164,24 +163,22 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         try {
             this.incrementMSCounter();
+            this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
+
+            transferOwnershipOnLeave();
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
             sendMcastMessage(msg, this.sndDatagramSocket, this.mcastAddr, this.mcastPort);
 
             endMcastReceiver();
-
-            var keysCopy = new HashSet<>(this.keys);
-            for (String key : keysCopy) {
-                this.transferFile(key);
-            }
         } catch (Exception e) {
-            System.out.println("Failure to leave " + this.mcastAddr + ":" + this.mcastPort);
-            System.out.println(e);
-            throw new RuntimeException(e);
+            System.out.println("Failure leaving " + this.mcastAddr + ":" + this.mcastPort);
+            System.out.println(e.getMessage());
         }
         return true;
     }
+
 
     private void initMcastReceiver() throws IOException {
         this.rcvDatagramSocket = new DatagramSocket(null);
@@ -194,46 +191,54 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
+    private void joinAfterCrash() {
+        try {
+            ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+            MembershipCollector.collectLight(serverSocket, this);
+            initMcastReceiver();
+            this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
-
-    public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
-        this.membershipView.merge(membershipTable, membershipLog);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))) {
-            this.alreadySent.clear();
-            this.saveLogs();
+            this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
         }
-        timerTask();
+        catch (IOException e) {throw new RuntimeException(e);}
     }
+
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
-            this.alreadySent.clear();
-            this.saveLogs();
-        }
-        timerTask();
+        posUpdate(oldLogs, false);
+        this.timerTask();
+    }
+    public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
+        this.membershipView.merge(membershipTable, membershipLog);
+        posUpdate(oldLogs, true);
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
-        if (this.membershipView.getMembershipLog().hasChanged(new MembershipLog(oldLogs))){
-            this.alreadySent.clear();
+        posUpdate(oldLogs, false);
+    }
+    private void posUpdate(List<MembershipLogRecord> oldLogs, boolean membership) {
+        System.out.println(this.getMembershipView());
+        var changes = this.membershipView.getMembershipLog().changes(new MembershipLog(oldLogs));
+        if (!changes.isEmpty()) {
+            if (membership) {
+                System.out.println("Transferring ownership on membership message");
+                for (var record : changes) if (record.getCounter() % 2 == 0) this.transferOwnershipOnJoin(record.getNodeID());
+            }
+            this.lastSent = null;
             this.saveLogs();
         }
-        timerTask();
     }
-
-    private void timerTask() {
-        // Compare hashedID with the smaller hashedID in the cluster view
-        var infoMap = this.membershipView.getMembershipTable().getMembershipInfoMap();
-        boolean smaller = !infoMap.isEmpty() && id.equals(infoMap.firstKey());
-        System.out.println("Am I the smaller: " + smaller);
+    public void timerTask() {
+        // Compare hashedID with the smaller hashedID online in the cluster view
+        boolean smaller = this.isOnline() && id.equals(this.smallestOnline);
 
         if (this.executorTimerTask == null && smaller) {
-            System.out.println("Alarm setted");
+            System.out.println("Alarm set");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.SECONDS);
+            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.MILLISECONDS);
         }
         else if (this.executorTimerTask != null && !smaller) {
             System.out.println("Alarm canceled");
@@ -252,187 +257,223 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     // ---------- SERVICE PROTOCOL -------------
 
     @Override
-    public void put(String key, String value) {
-        // In order to discard duplicated requests
-        if (this.keys.contains(key)) return;
+    public String put(String key, String value) {
+        if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
 
-        // File is stored in the closest node of the key and its replicas
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+        String response;
+        var closestNode = this.getClosestMembershipInfo(key);
+        var preferenceList = this.getPreferenceList(key);
+        if (closestNode.getKey().equals(this.id)) {
+            if (FileUtils.saveFile(this.id, key, value)) {
+                this.keys.add(key);
+                response = ackMessage("SUCCESS");
+            }
+            else {
+                return ackMessage("FAILURE - Couldn't save the file");
+            }
 
-        if (closestEntry.getKey().equals(this.id)) {
-            this.saveFile(key, value);
-
-            // the closest node of the key is the one responsible for the coordination of the replication
-            for (var nextKey : replicationEntries.keySet())
-                this.redirectService(replicationEntries.get(nextKey), Message.storeMessage("PUT", key, value));
-        } else {
-            if (replicationEntries.containsKey(this.id)) this.saveFile(key, value);
-            this.redirectService(closestEntry.getValue(), Message.storeMessage("PUT", key, value));
+            String replicaMessage = MessageStore.replicaPutMessage(key, value);
+            for (var replica : preferenceList) {
+                if (replica.equals(this.id)) continue;
+                this.executor.execute(new OperationReplicatorThread(this, replica, replicaMessage));
+            }
         }
+        else {
+            response = this.redirect(closestNode.getValue(), MessageStore.putMessage(key, value));
+        }
+        return response;
     }
 
     @Override
     public String get(String key) {
-        // File (that was requested the content from) is stored in the closest node of the key
+        if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
         if (this.keys.contains(key)) {
-            return this.getFile(key);
+            return ackMessage(FileUtils.getFile(this.id, key));
         }
 
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
-        replicationEntries.put(closestEntry.getKey(), closestEntry.getValue());
-
-        String requestMessage = Message.storeMessage("GET", key);
-        for (var node : replicationEntries.values()) {
+        var preferenceList = getPreferenceList(key);
+        String requestMessage = MessageStore.replicaGetMessage(key);
+        for (var nodeKey : preferenceList) {
+            if (nodeKey.equals(this.id)) continue;
+            MembershipInfo node = this.getMembershipInfo(nodeKey);
             try (Socket socket = new Socket(node.getIP(), node.getPort())) {
                 TcpMessager.sendMessage(socket, requestMessage);
                 socket.setSoTimeout(2000);
-                String response = TcpMessager.receiveMessage(socket);
-                if (!response.equals("null")) return response;
+                return TcpMessager.receiveMessage(socket);
             }  catch (IOException e) {
                 System.out.println("Node of get unreachable");
             }
         }
 
-        return null;
+        return ackMessage("FAILURE - Couldn't find the file required");
     }
 
     @Override
-    public void delete(String key) {
-        // File (that was requested to be deleted) is stored in the closest node of the key and its replicas
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
+    public String delete(String key) {
+        if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
+        String response;
+        var closestNode = this.getClosestMembershipInfo(key);
+        var preferenceList = this.getPreferenceList(key);
 
-        if (closestEntry.getKey().equals(this.id)) {
-            // In order to discard duplicated requests
-            if (!this.keys.contains(key)) return;
-            this.deleteFile(key);
+        if (closestNode.getKey().equals(this.id)) {
+            if (this.keys.contains(key)) {
+                if (!FileUtils.deleteFile(this.id, key)) {
+                    return ackMessage("FAILURE - Couldn't delete the file");
+                }
+                this.keys.remove(key);
+            }
+            this.keys.remove(key);
+            response = ackMessage("SUCCESS");
 
-            // the closest node of the key is the one responsible for the coordination of the replication
-            for (var nextKey : replicationEntries.keySet())
-                this.redirectService(replicationEntries.get(nextKey), Message.storeMessage("DELETE", key));
-        } else {
-            if (replicationEntries.containsKey(this.id)) this.deleteFile(key);
-            this.redirectService(closestEntry.getValue(), Message.storeMessage("DELETE", key));
+            String delReplicaMessage = MessageStore.replicaDelMessage(key);
+            for (var replica : preferenceList) {
+                if (replica.equals(this.id)) continue;
+                this.executor.execute(new OperationReplicatorThread(this, replica, delReplicaMessage));
+            }
         }
-    }
-
-    public boolean transferFile(String key) {
-        var value = this.getFile(key);
-        if (value == null) return false;
-
-        Map.Entry<String, MembershipInfo> closestEntry = this.membershipView.getClosestMembershipInfo(key);
-        if (closestEntry == null) {
-            this.deleteFile(key);
-            return true;
+        else {
+            response = this.redirect(closestNode.getValue(), MessageStore.deleteMessage(key));
         }
+        return response;
+    }
 
-        Map<String, MembershipInfo> replicationEntries = this.getReplicationEntries(closestEntry);
-        // TODO think of a better way to reduce the number of messages exchange
-        String requestMessage = Message.storeMessage("PUT", key, value);
-        this.redirectService(closestEntry.getValue(), requestMessage);
-        for (var nextKey : replicationEntries.keySet())
-            this.redirectService(replicationEntries.get(nextKey), requestMessage);
-        this.deleteFile(key);
-        return true;
-    }
-    public boolean copyFile(String key, String nodeID) {
-        var membershipInfo =  this.getMembershipView().getMembershipTable().getMembershipInfoMap().get(nodeID);
-        var value = this.getFile(key);
-        if (value == null) return false;
-        this.redirectService(membershipInfo, Message.storeMessage("PUT", key, value));
-        return true;
-    }
-    public void saveFile(String key, String value) {
+    public String replicaPut(String key, String value) {
         if (FileUtils.saveFile(this.id, key, value)) {
             this.keys.add(key);
+            return ackMessage("SUCCESS");
         }
+        return ackMessage("FAILURE - Couldn't save the file");
     }
-    public String getFile(String key) {
-        return FileUtils.getFile(this.id, key);
-    }
-    public void deleteFile(String key) {
+    public String replicaDel(String key) {
+        if (!this.keys.contains(key)) return ackMessage("Not exists");
         if (FileUtils.deleteFile(this.id, key)) {
             this.keys.remove(key);
+            return ackMessage("SUCCESS");
         }
+        return ackMessage("FAILURE - Couldn't delete the file");
+    }
+    public String replicaGet(String key) {
+        if (this.keys.contains(key)) {
+            return ackMessage(FileUtils.getFile(this.id, key));
+        }
+        return ackMessage("FAILURE - Couldn't find the file required");
     }
 
-    public void redirectService(MembershipInfo node, String requestMessage) {
-        try {
-            TcpMessager.sendMessage(node.getIP(), node.getPort(), requestMessage);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public void transfer(String nodeID, String key, boolean delete) {
+        String value = FileUtils.getFile(this.id, key);
+        if (value == null) return;
+        String response = this.redirect(getMembershipInfo(nodeID), MessageStore.replicaPutMessage(key, value));
+        if (delete) FileUtils.deleteFile(this.id, key);
+        System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
 
-    public Map<String, MembershipInfo> getReplicationEntries(Map.Entry<String, MembershipInfo> closestEntry) {
-        Map<String, MembershipInfo> replicationEntries = new HashMap<>();
+    public String redirect(MembershipInfo node, String requestMessage) {
+        try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage); }
+        catch (ConnectException e) { System.out.println("Node " + nodeIP + " is down"); } // TODO do something
+        catch (IOException e) { e.printStackTrace(); }
+        return null;
+    }
 
-        Map.Entry<String, MembershipInfo> lastEntry = closestEntry;
-        if (lastEntry == null) return replicationEntries;
-        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
-            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry.getKey());
-            if (lastEntry.getKey().equals(closestEntry.getKey())) break;
-            replicationEntries.put(lastEntry.getKey(), lastEntry.getValue());
+    public void transferOwnershipOnLeave() {
+        var keysCopy = new HashSet<>(this.keys);
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            if (preferenceList.size() < REPLICATION_FACTOR) this.replicaDel(key);
+            else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
         }
-
-        return replicationEntries;
+    }
+    public void transferOwnershipOnJoin(String nodeID) {
+        if (this.getClusterSize() <= 1) return;
+        var keysCopy = new HashSet<>(this.getKeys());
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            // If nodes are less than replication factor and this node was the closest before new node arrival copy file
+            if (this.getClusterSize() <= REPLICATION_FACTOR) {
+                var prevClosestNode = preferenceList.stream()
+                        .filter(nodeKey -> !nodeKey.equals(nodeID)).findFirst().get();
+                if (prevClosestNode.equals(this.id)) {
+                    this.transfer(nodeID, key, false);
+                }
+            }
+            else {
+                if (!preferenceList.contains(nodeID) || preferenceList.contains(this.id))
+                    continue;
+                if (this.keys.contains(key) && !preferenceList.contains(this.id)) {
+                    this.transfer(nodeID, key, true);
+                }
+            }
+        }
     }
 
     // ---------- END OF SERVICE PROTOCOL ---------------
 
     // -------------- GETS AND SETS ---------------------
 
-    public String getNodeIP() {
-        return nodeIP;
+    public String getId() {
+        return this.id;
     }
-    public int getStorePort() {
-        return this.storePort;
+    public String getNodeIP() {
+        return this.nodeIP;
     }
     private String getNodeIPPort() {
         return this.nodeIP + ":" + this.storePort;
     }
-    public String getId() {
-        return this.id;
-    }
     public InetAddress getMcastAddr() {
-        return mcastAddr;
+        return this.mcastAddr;
+    }
+    public int getStorePort() {
+        return this.storePort;
     }
     public int getMcastPort() {
-        return mcastPort;
+        return this.mcastPort;
+    }
+    public int getMembershipCounter() {
+        return this.membershipCounter;
+    }
+    public int getClusterSize() {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
     }
     public DatagramSocket getRcvDatagramSocket() {
         return this.rcvDatagramSocket;
     }
     public DatagramSocket getSndDatagramSocket() {
-        return sndDatagramSocket;
-    }
-    public int getMembershipCounter() {
-        return this.membershipCounter;
+        return this.sndDatagramSocket;
     }
     public MembershipView getMembershipView() {
-        return membershipView;
+        return this.membershipView;
+    }
+    public String getLastSent() {
+        return this.lastSent;
     }
     public Set<String> getKeys() {
-        return keys;
+        return this.keys;
     }
-    public Set<String> getAlreadySent() {
-        return this.alreadySent;
+    public List<String> getPreferenceList(String key) {
+        List<String> preferenceList = new ArrayList<>();
+        var closestEntry = this.getClosestMembershipInfo(key);
+        if (closestEntry == null) return preferenceList;
+        String closestKey = closestEntry.getKey();
+        preferenceList.add(closestKey);
+        String lastEntry = closestKey;
+        for (int i = 0; i < REPLICATION_FACTOR - 1; i++) {
+            lastEntry = this.membershipView.getNextClosestMembershipInfo(lastEntry).getKey();
+            if (lastEntry.equals(closestKey)) break;
+            preferenceList.add(lastEntry);
+        }
+        return preferenceList;
+    }
+    public MembershipInfo getMembershipInfo(String nodeID) {
+        return this.membershipView.getMembershipTable().getMembershipInfoMap().getOrDefault(nodeID, null);
     }
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getClosestMembershipInfo(keyHashed);
     }
-    public Map.Entry<String, MembershipInfo> getNextClosestMembershipInfo(String keyHashed) {
-        return this.membershipView.getNextClosestMembershipInfo(keyHashed);
-    }
-    public int getClusterSize() {
-        return this.membershipView.getMembershipTable().getMembershipInfoMap().size();
+    public String getSmallestMembershipNode() {
+        return this.membershipView.getMembershipTable().getSmallestMembershipNode();
     }
 
-    public void setMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        this.membershipView.setMembershipTable(membershipTable);
-        this.membershipView.setMembershipLog(membershipLog);
+    public void setLastSent(String nodeID) {
+        this.lastSent = nodeID;
     }
 
     public void addToPendingQueue(DispatcherThread dispatcherThread) {
@@ -455,10 +496,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public void startMSCounter(){
         // check if counter is stored in NV-memory
-        String storedCounter = this.getFile("membershipCounter");
+        String storedCounter = FileUtils.getFile(this.id, "membershipCounter");
         this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
     }
-
     public void incrementMSCounter(){
         this.membershipCounter++;
         FileUtils.saveFile(this.id, "membershipCounter", String.valueOf(this.membershipCounter));
@@ -467,9 +507,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void saveLogs(){
         FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
     }
-
     public void loadLogs(){
-        String storedLogs = this.getFile("membershipLogs");
+        String storedLogs = FileUtils.getFile(this.id, "membershipLogs");
         if (storedLogs == null) {
             System.out.println("No previous logs found...\n");
             return;
@@ -482,4 +521,25 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         this.membershipView.setMembershipLog(membershipLog);
     }
+
+    public void loadKeys() {
+        List<String> files = FileUtils.listFiles(this.id);
+        List<String> fileKeys = files.stream()
+                .filter(name -> !name.startsWith("membership"))
+                .map(name -> name.split("\\.")[0]).toList();
+        this.keys.addAll(fileKeys);
+    }
+
+    public void selectAlarmer(boolean increment, String nodeID) {
+        if (nodeID != null) {
+            smallestOnline = nodeID;
+        } else if (increment) {
+            smallestOnline = this.membershipView.getMembershipTable()
+                    .getNextClosestMembershipInfo(smallestOnline).getKey();
+        } else {
+            smallestOnline = this.membershipView.getMembershipTable().getSmallestMembershipNode();
+        }
+        timerTask();
+    }
+
 }

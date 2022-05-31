@@ -1,5 +1,5 @@
 
-import messages.Message;
+import messages.MessageClient;
 import messages.TcpMessager;
 import utils.HashUtils;
 
@@ -15,10 +15,10 @@ public class TestClient {
     public static void main(String[] args) throws NotBoundException, IOException {
         String correctInput = """
                 java TestClient <node_ap> <operation> [<opnd>]\s
-                  <node_ap> : IP:PORT (UDP or TCP) | name of the remote object (RMI)
+                  <node_ap> : IP:PORT
                   <operation> : key-value (put, get or delete) or membership (join, leave)
                   <opnd> [needed for key-value operations] :
-                       put: file pathname and value to add
+                       put: file pathname to the value to be added
                        get or delete: string of hexadecimal symbols encoding the sha-256 key returned by put""";
 
         if (args.length < 2 || args.length > 4) {
@@ -26,8 +26,8 @@ public class TestClient {
             return;
         }
 
-        if (!isValidNodeAccessPoint("TCP", args[0])) {
-            System.out.println("Wrong node access point representation according to the implementation. \n" + correctInput);
+        if (!isValidNodeAccessPoint(args[0])) {
+            System.out.println("Wrong node access point representation. \n" + correctInput);
             return;
         }
         String nodeAC = args[0];
@@ -59,9 +59,13 @@ public class TestClient {
                 if (value == null) break;
                 String key = HashUtils.getHashedSha256(value);
                 if (key == null) break;
-                
-                TcpMessager.sendMessage(nodeIP, nodePort, Message.storeMessage("PUT", key, value));
-                System.out.println(key);
+
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    TcpMessager.sendMessage(socket, MessageClient.putMessage(key, value));
+                    String response = TcpMessager.receiveMessage(socket);
+                    System.out.println(new MessageClient(response).getBody());
+                }
+                System.out.println("\nKey: " + key);
             }
             case "get" -> {
                 if (args.length != 3) {
@@ -72,9 +76,10 @@ public class TestClient {
                 System.out.println("perform get operation nodeAC= " + nodeAC + " , key= " + key);
 
                 try (Socket socket = new Socket(nodeIP, nodePort)) {
-                    TcpMessager.sendMessage(socket, Message.storeMessage("GET", key));
+                    TcpMessager.sendMessage(socket, MessageClient.getMessage(key));
                     String value = TcpMessager.receiveMessage(socket);
-                    System.out.println(value);
+                    System.out.println("\n\nValue:\n");
+                    System.out.println(new MessageClient(value).getBody());
                 }
             }
             case "delete" -> {
@@ -84,34 +89,31 @@ public class TestClient {
                 }
                 String key = args[2];
                 System.out.println("perform delete operation nodeAC= " + nodeAC + " , key= " + key);
-                TcpMessager.sendMessage(nodeIP, nodePort, Message.storeMessage("DELETE", key));
+                try (Socket socket = new Socket(nodeIP, nodePort)) {
+                    TcpMessager.sendMessage(socket, MessageClient.deleteMessage(key));
+                    String response = TcpMessager.receiveMessage(socket);
+                    System.out.println(new MessageClient(response).getBody());
+                }
             }
             default -> System.out.println("Specified Operation does not exists. \n" + correctInput);
         }
     }
 
     // Function to validate the entry for node access point.
-    public static boolean isValidNodeAccessPoint(String implementation, String nodeAP) {
-        if (implementation.equals("TCP") || implementation.equals("UDP")) {
-            String regexZeroTo255 = "(\\d{1,2}|(0|1)\\d{2}|2[0-4]\\d|25[0-5])";
-            String regexIP = regexZeroTo255 + "\\." + regexZeroTo255 + "\\." + regexZeroTo255 + "\\." + regexZeroTo255;
-            String regexPORT = "(\\d{1,4}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])";
-            String regex = regexIP + "\\:" + regexPORT;
+    public static boolean isValidNodeAccessPoint(String nodeAP) {
+        String regexZeroTo255 = "(\\d{1,2}|(0|1)\\d{2}|2[0-4]\\d|25[0-5])";
+        String regexIP = regexZeroTo255 + "\\." + regexZeroTo255 + "\\." + regexZeroTo255 + "\\." + regexZeroTo255;
+        String regexPORT = "(\\d{1,4}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])";
+        String regex = regexIP + "\\:" + regexPORT;
 
-            Pattern pattern = Pattern.compile(regex);
-            return (pattern.matcher(nodeAP).matches());
-        } else if(implementation.equals("RMI")) {
-            return true;
-        } else {
-            System.out.println("Not a valid implementation parameter");
-            return false;
-        }
+        Pattern pattern = Pattern.compile(regex);
+        return (pattern.matcher(nodeAP).matches());
     }
 
     private static String readFile(String pathname) {
         File keyFile = new File(pathname);
         if (!keyFile.exists()) {
-            System.out.println("File name " + pathname + " does not exists");
+            System.out.println("File name " + pathname + " does not exist");
             return null;
         }
         if (!keyFile.canRead()){

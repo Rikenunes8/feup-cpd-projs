@@ -1,4 +1,5 @@
 import messages.Message;
+import messages.MessageStore;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -28,23 +29,49 @@ public class DispatcherThread implements Runnable {
 
     public void processMessage() {
         try {
+            String response = MessageStore.ackMessage("FAILURE - Not online");
             Map<String, String> header = this.message.getHeader();
-            if (header.containsKey("Type")) {
-                switch (header.get("Type")) {
+            var type = header.getOrDefault("Type", null);
+            var key = header.getOrDefault("Key", null);
+            if (type != null) {
+                switch (type) {
                     case "JOIN" -> this.store.join();
                     case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
-                        if (!canProcess()) return;
-                        this.store.put(header.get("Key"), this.message.getBody());
+                        if (canProcess()) {
+                            response = this.store.put(key, this.message.getBody());
+                            TcpMessager.sendMessage(this.socket, response);
+                        } else {return;}
                     }
                     case "GET" -> {
-                        if (!canProcess()) return;
-                        String response = this.store.get(header.get("Key"));
-                        TcpMessager.sendMessage(this.socket, response);
+                        if (canProcess()) {
+                            response = this.store.get(key);
+                            TcpMessager.sendMessage(this.socket, response);
+                        } else {return;}
                     }
                     case "DELETE" -> {
-                        if (!canProcess()) return;
-                        this.store.delete(header.get("Key"));
+                        if (canProcess()) {
+                            response = this.store.delete(key);
+                            TcpMessager.sendMessage(this.socket, response);
+                        } else {return;}
+                    }
+                    case "REPLICA_PUT" -> {
+                        if (canProcess()) {
+                            response = this.store.replicaPut(key, this.message.getBody());
+                            TcpMessager.sendMessage(this.socket, response);
+                        } else {return;}
+                    }
+                    case "REPLICA_DEL" -> {
+                        if (canProcess()) {
+                            response = this.store.replicaDel(key);
+                            TcpMessager.sendMessage(this.socket, response);
+                        } else {return;}
+                    }
+                    case "REPLICA_GET" -> {
+                        if (canProcess()) {
+                            response = this.store.replicaGet(key);
+                            TcpMessager.sendMessage(this.socket, response);
+                        } else {return;}
                     }
                     default -> System.out.println("Type not implemented");
                 }
@@ -53,7 +80,7 @@ public class DispatcherThread implements Runnable {
             }
             this.socket.close();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            System.out.println(e.getMessage());
         }
     }
 

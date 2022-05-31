@@ -5,6 +5,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Scanner;
 
 public class FileUtils {
@@ -38,14 +41,14 @@ public class FileUtils {
 
             if (!keyFile.exists()) {
                 if (!keyFile.createNewFile()) {
-                    System.out.println("An error occurred when creating keyFile in node " + id);
+                    System.out.println("An error occurred when creating keyFile in node " + sub(id));
                     return false;
                 }
             }
 
             if (!keyFile.canWrite()) {
                 System.out.println("Permission denied! Can not write value of key "
-                        + key + " in node " + id);
+                        + sub(key) + " in node " + sub(id));
                 return false;
             }
 
@@ -54,10 +57,10 @@ public class FileUtils {
             keyFileWriter.write(value);
             keyFileWriter.close();
 
-            System.out.println("Successfully saved key-value pair in node " + id);
+            System.out.println("Successfully saved key-value pair " + sub(key) + " in node " + sub(id));
 
         } catch (IOException e) {
-            System.out.println("An error occurred when saving key-value pair in node " + id);
+            System.out.println("An error occurred when saving key-value pair " + sub(key) + " in node " + sub(id));
             e.printStackTrace();
             return false;
         }
@@ -69,11 +72,11 @@ public class FileUtils {
             File keyFile = new File(STORAGE_ROOT + id + "/" + key + ".txt");
 
             if (!keyFile.exists()) {
-                System.out.println("In node " + id + " there doesn't exist any value associated with the key: " + key);
+                System.out.println("Node " + sub(id) + " doesn't have any value associated with the key: " + sub(key));
                 return null;
             }
             if (!keyFile.canRead()){
-                System.out.println("Permission denied! Can not read value of key " + key + " in node " + id);
+                System.out.println("Permission denied! Can not read value of key " + sub(key) + " in node " + sub(id));
                 return null;
             }
 
@@ -87,7 +90,7 @@ public class FileUtils {
             return value.toString();
 
         } catch (IOException e) {
-            System.out.println("An error occurred when retrieving the value of key " + key + " in node " + id);
+            System.out.println("An error occurred when retrieving the value of key " + sub(key) + " in node " + sub(id));
             e.printStackTrace();
             return null;
         }
@@ -97,16 +100,29 @@ public class FileUtils {
         File keyFile = new File(STORAGE_ROOT + id + "/" + key + ".txt");
 
         if (!keyFile.exists()) {
-            System.out.println("In node " + id + " there doesn't exist any value associated with the key: " + key);
+            System.out.println("Node " + sub(id) + " doesn't have any value associated with the key: " + sub(key));
             return true;
         }
 
         if (keyFile.delete()) {
-            System.out.println("Successfully deleted key-value pair in node " + id);
+            System.out.println("Successfully deleted key-value pair " + sub(key) + " in node " + sub(id));
             return true;
         }
 
-        System.out.println("An error occurred when deleting key-value pair in node " + id);
+        System.out.println("An error occurred when deleting key-value pair " + sub(key) + " in node " + sub(id));
         return false;
     }
+
+    public static List<String> listFiles(String id) {
+        File directory = new File(STORAGE_ROOT + id);
+        String[] filesArr = directory.list();
+        if (filesArr == null) return new ArrayList<>();
+        return new ArrayList<>(Arrays.asList(filesArr));
+    }
+
+    public static String sub(String key) {
+        return key.substring(0, 14);
+    }
+
+
 }

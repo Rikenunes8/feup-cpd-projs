@@ -7,6 +7,13 @@ import java.util.AbstractMap;
 import java.util.Map;
 
 public class TcpMessager {
+    public static String sendAndReceiveMessage(String ip, int port, String message) throws IOException {
+        try (Socket socket = new Socket(ip, port)) {
+            sendMessage(socket, message);
+            return receiveMessage(socket);
+        }
+    }
+
     public static void sendMessage(String ip, int port, String message) throws IOException {
         try (Socket socket = new Socket(ip, port)) {
             sendMessage(socket, message);

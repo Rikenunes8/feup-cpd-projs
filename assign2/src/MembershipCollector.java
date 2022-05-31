@@ -1,5 +1,5 @@
 import membership.MembershipView;
-import messages.Message;
+import messages.MessageStore;
 import messages.TcpMessager;
 
 import java.io.IOException;
@@ -11,7 +11,6 @@ import java.util.AbstractMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static messages.Message.joinMessage;
 import static messages.MulticastMessager.sendMcastMessage;
 
 public class MembershipCollector {
@@ -21,10 +20,10 @@ public class MembershipCollector {
 
     public static void collect(ServerSocket serverSocket, Store store) {
         final ConcurrentHashMap<String, MembershipView> membershipViews = new ConcurrentHashMap<>();
-        System.out.println("Listening for Membership messages on port " + serverSocket.getLocalPort());
+        System.out.println("Listening to Membership messages on port " + serverSocket.getLocalPort());
 
         // Notice cluster members of my join
-        String msg = joinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
+        String msg = MessageStore.joinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
 
         boolean send = true;
         int attempts = 0;
@@ -51,8 +50,33 @@ public class MembershipCollector {
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
 
-        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
         store.mergeMembershipViews(membershipViews);
+        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+
+        System.out.println("Membership views synchronized"); // TODO DEBUG
+    }
+
+    public static void collectLight(ServerSocket serverSocket, Store store) {
+        final ConcurrentHashMap<String, MembershipView> membershipViews = new ConcurrentHashMap<>();
+        System.out.println("Listening to Membership messages on port " + serverSocket.getLocalPort());
+
+        // Notice cluster members of my join
+        String msg = MessageStore.rejoinMessage(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter(), serverSocket.getLocalPort());
+        try {sendMcastMessage(msg, store.getSndDatagramSocket(), store.getMcastAddr(), store.getMcastPort());}
+        catch (IOException ex) {throw new RuntimeException(ex);}
+        do {
+            var entry = membershipReaderTask(serverSocket);
+            if (entry != null) membershipViews.put(entry.getKey(), entry.getValue());
+            else { break; }
+        } while (membershipViews.size() < MAX_MS_MSG);
+
+        try {serverSocket.close();}
+        catch (IOException e) {throw new RuntimeException(e);}
+
+        System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
+
+        store.mergeMembershipViews(membershipViews);
+        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
 
         System.out.println("Membership views synchronized"); // TODO DEBUG
     }
@@ -65,14 +89,14 @@ public class MembershipCollector {
             System.out.println("New membership connection");
             String msg = TcpMessager.receiveMessage(socket);
 
-            Message message = new Message(msg);
+            MessageStore message = new MessageStore(msg);
             String id = message.getHeader().get("NodeID");
-            MembershipView membershipView = Message.parseMembershipMessage(message);
+            MembershipView membershipView = MessageStore.parseMembershipMessage(message);
 
             socket.close();
             return new AbstractMap.SimpleEntry<>(id, membershipView);
         }
-        catch (SocketTimeoutException e) { System.out.println("Timeout?!"); }
+        catch (SocketTimeoutException e) { System.out.println("Timeout occurred waiting for membership messages\n"); }
         catch (SocketException e) { System.out.println(e.getMessage()); }
         catch (IOException e) { throw new RuntimeException(); }
 
