@@ -56,19 +56,22 @@ public class DispatcherThread implements Runnable {
                         } else {return;}
                     }
                     case "REPLICA_PUT" -> {
-                        if (store.isOnline())
+                        if (canProcess()) {
                             response = this.store.replicaPut(key, this.message.getBody());
-                        TcpMessager.sendMessage(this.socket, response);
+                            TcpMessager.sendMessage(this.socket, response);
+                        }
                     }
                     case "REPLICA_DEL" -> {
-                        if (store.isOnline())
+                        if (canProcess()) {
                             response = this.store.replicaDel(key);
-                        TcpMessager.sendMessage(this.socket, response);
+                            TcpMessager.sendMessage(this.socket, response);
+                        }
                     }
                     case "REPLICA_GET" -> {
-                        if (store.isOnline())
+                        if (canProcess()) {
                             response = this.store.replicaGet(key);
-                        TcpMessager.sendMessage(this.socket, response);
+                            TcpMessager.sendMessage(this.socket, response);
+                        }
                     }
                     default -> System.out.println("Type not implemented");
                 }
