@@ -260,6 +260,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public String put(String key, String value) {
         String response;
         var closestNode = this.getClosestMembershipInfo(key);
+        var preferenceList = this.getPreferenceList(key);
+
         if (closestNode.getKey().equals(this.id)) {
             if (FileUtils.saveFile(this.id, key, value)) {
                 this.keys.add(key);
@@ -269,12 +271,11 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 return ackMessage("FAILURE - Couldn't save the file");
             }
 
-            // TODO This must be in a thread and guarantee replication
-            for (var replicaKey : this.getPreferenceList(key)) {
-                if (replicaKey.equals(this.id)) continue;
-                String resp = this.redirect(this.getMembershipInfo(replicaKey), MessageStore.replicaMessage(key, value));
+            String replicaMessage = MessageStore.replicaMessage(key, value);
+            for (var replica : preferenceList) {
+                if (replica.equals(this.id)) continue;
+                this.executor.execute(new OperationReplicatorThread(this, replica, replicaMessage));
             }
-
         }
         else {
             response = this.redirect(closestNode.getValue(), MessageStore.putMessage(key, value));
@@ -309,19 +310,22 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public String delete(String key) {
         String response;
         var closestNode = this.getClosestMembershipInfo(key);
+        var preferenceList = this.getPreferenceList(key);
 
-        if (this.keys.contains(key)) {
-            if (!FileUtils.deleteFile(this.id, key)) {
+        if (closestNode.getKey().equals(this.id)) {
+            if (this.keys.contains(key)) {
+                if (!FileUtils.deleteFile(this.id, key)) {
+                    return ackMessage("FAILURE - Couldn't delete the file");
+                }
                 this.keys.remove(key);
-                return ackMessage("FAILURE - Couldn't delete the file");
             }
             this.keys.remove(key);
             response = ackMessage("SUCCESS");
 
-            // TODO This must be in a thread
-            for (var replica : this.getPreferenceList(key)) {
+            String delReplicaMessage = MessageStore.delReplicaMessage(key);
+            for (var replica : preferenceList) {
                 if (replica.equals(this.id)) continue;
-                String resp = this.redirect(this.getMembershipInfo(replica), MessageStore.delReplicaMessage(key));
+                this.executor.execute(new OperationReplicatorThread(this, replica, delReplicaMessage));
             }
         }
         else {
