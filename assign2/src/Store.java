@@ -203,16 +203,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         catch (IOException e) {throw new RuntimeException(e);}
     }
 
-    public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
-        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
-        this.membershipView.merge(membershipTable, membershipLog);
-        posUpdate(oldLogs, true);
-    }
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.updateMembershipInfo(id, ip, port, membershipCounter);
         posUpdate(oldLogs, false);
         this.timerTask();
+    }
+    public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
+        var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
+        this.membershipView.merge(membershipTable, membershipLog);
+        posUpdate(oldLogs, true);
     }
     public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
@@ -225,7 +225,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         if (!changes.isEmpty()) {
             if (membership) {
                 System.out.println("Transferring ownership on membership message");
-                System.out.println(changes);
                 for (var record : changes) if (record.getCounter() % 2 == 0) this.transferOwnershipOnJoin(record.getNodeID());
             }
             this.lastSent = null;
