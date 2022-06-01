@@ -35,4 +35,8 @@ public class PendingRequests {
         }
         return new ArrayList<>();
     }
+
+    public Map<String, List<String>> getPendingMessages() {
+        return pendingMessages;
+    }
 }

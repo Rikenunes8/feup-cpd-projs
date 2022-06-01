@@ -2,9 +2,7 @@ package messages;
 
 import membership.*;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 public class MessageStore extends Message{
     public MessageStore(String msg) {
@@ -113,5 +111,40 @@ public class MessageStore extends Message{
             }
         }
         return new MembershipView(membershipTable, membershipLog);
+    }
+
+    public static String pendingRequestsMessage(Map<String, List<String>> pendingRequests) {
+        // BODY
+        StringBuilder body = new StringBuilder();
+        for (String key : pendingRequests.keySet()) {
+            body.append("$KEY$").append(key);
+            for (var message : pendingRequests.get(key)) {
+                body.append("$MSG$").append(message);
+            }
+        }
+
+        // Setting up the header
+        Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("Type", "REQUESTS" );
+        headerLines.put("BodySize", String.valueOf(body.toString().length()));
+
+        return buildHeader(headerLines) + body;
+    }
+
+    public static Map<String, List<String>> parsePendingRequestsMessage(Message message) {
+        Map<String, List<String>> map = new HashMap<>();
+        String body = message.getBody();
+        var keysSections = body.split("\\$KEY\\$");
+        for (var aux : keysSections) {
+            var aux2 = aux.split("\\$MSG\\$");
+            if (aux2.length < 2)  continue;
+            String key = aux2[0];
+            List<String> msgs = new ArrayList<>();
+            for (int i = 1; i < aux2.length; i++) {
+                msgs.add(aux2[i]);
+            }
+            map.put(key, msgs);
+        }
+        return map;
     }
 }

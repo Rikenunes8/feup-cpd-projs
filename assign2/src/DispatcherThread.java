@@ -67,6 +67,10 @@ public class DispatcherThread implements Runnable {
                         response = this.store.replicaGet(key);
                         TcpMessager.sendMessage(this.socket, response);
                     }
+                    case "REQUESTS" -> {
+                        TcpMessager.sendMessage(this.socket, MessageStore.ackMessage("SUCCESS"));
+                        if (this.store.isOnline()) this.store.mergePendingRequests(message);
+                    }
                     default -> System.out.println("Type not implemented");
                 }
             } else {

@@ -36,22 +36,6 @@ public class DispatcherMcastThread implements Runnable {
         }
     }
 
-    private void msUpdateHandler(Map<String, String> header, boolean all) throws InterruptedException {
-        System.out.println("Received rejoin message from " + header.get("NodeIP"));
-        String nodeID = header.get("NodeID");
-        String nodeIP = header.get("NodeIP");
-        int msPort    = Integer.parseInt(header.get("MembershipPort"));
-
-        if (this.store.getId().equals(nodeID)) return; // Must ignore a rejoin message from itself
-
-        Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
-
-        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView(), all);
-        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
-        catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
-
-        if (!all) this.store.applyPendingRequests(nodeID);
-    }
 
     private void joinHandler(Map<String, String> header) throws InterruptedException {
         System.out.println("Received join message from " + header.get("NodeIP"));
@@ -98,5 +82,22 @@ public class DispatcherMcastThread implements Runnable {
 
         this.store.selectAlarmer(false, nodeId);
         this.store.applyPendingRequests(nodeId);
+    }
+
+    private void msUpdateHandler(Map<String, String> header, boolean all) throws InterruptedException {
+        System.out.println("Received rejoin message from " + header.get("NodeIP"));
+        String nodeID = header.get("NodeID");
+        String nodeIP = header.get("NodeIP");
+        int msPort    = Integer.parseInt(header.get("MembershipPort"));
+
+        if (this.store.getId().equals(nodeID)) return; // Must ignore a rejoin message from itself
+
+        Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
+
+        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView(), all);
+        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
+        catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
+
+        if (!all) this.store.applyPendingRequests(nodeID);
     }
 }

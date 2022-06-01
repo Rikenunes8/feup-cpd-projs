@@ -5,6 +5,7 @@ import static messages.MulticastMessager.*;
 import static messages.MessageStore.leaveMessage;
 import static utils.FileUtils.sub;
 
+import messages.Message;
 import messages.MessageStore;
 import messages.TcpMessager;
 import utils.FileUtils;
@@ -188,8 +189,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
 
     private void transferPendingRequests() {
-        //this.redirect(this.membershipView.getNextClosestMembershipInfo(this.id), );
-
+        for (int i = 0; i < this.getClusterSize(); i++) {
+            var next = this.membershipView.getNextClosestMembershipInfo(this.id);
+            if (!this.pendingRequests.hasPendingRequests(next.getKey())) {
+                this.redirect(next.getValue(), MessageStore.pendingRequestsMessage(this.pendingRequests.getPendingMessages()));
+            }
+        }
     }
 
 
@@ -579,14 +584,23 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void addPendingRequest(String nodeID, String message) {
         this.pendingRequests.addRequest(nodeID, message);
     }
-
     public void emptyPendingRequests(String nodeID) {
         this.pendingRequests.empty(nodeID);
     }
-
     public void applyPendingRequests(String nodeID) {
         for (var message : this.pendingRequests.getNodePendingRequests(nodeID)){
             this.redirect(this.getMembershipInfo(nodeID), message);
+        }
+    }
+    public void mergePendingRequests(Message message) {
+        var receivedRequests = MessageStore.parsePendingRequestsMessage(message);
+        for (var key : receivedRequests.keySet()) {
+            if (this.pendingRequests.hasPendingRequests(key)) {
+                this.pendingRequests.getNodePendingRequests(key).addAll(receivedRequests.get(key));
+            }
+            else {
+                this.pendingRequests.getPendingMessages().put(key, receivedRequests.get(key));
+            }
         }
     }
 
