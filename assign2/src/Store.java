@@ -33,11 +33,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final Set<String> keys;
     private int membershipCounter;
     private final MembershipView membershipView;
+    private double sendMembershipProbability;
 
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
     private String lastSent;
     private String smallestOnline;
-    private PendingRequests pendingRequests;
+    private final PendingRequests pendingRequests;
 
 
     private final NetworkInterface networkInterface;
@@ -99,6 +100,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
+        this.sendMembershipProbability = 1.0;
 
         this.pendingRequests = new PendingRequests();
 
@@ -171,6 +173,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
 
             transferOwnershipOnLeave();
+            transferPendingRequests();
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
@@ -182,6 +185,11 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             System.out.println(e.getMessage());
         }
         return true;
+    }
+
+    private void transferPendingRequests() {
+        //this.redirect(this.membershipView.getNextClosestMembershipInfo(this.id), );
+
     }
 
 
@@ -199,7 +207,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private void joinAfterCrash() {
         try {
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
-            MembershipCollector.collectLight(serverSocket, this);
+            MembershipCollector.collectLight(serverSocket, this, false);
             initMcastReceiver();
             this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
@@ -217,14 +225,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
-        posUpdate(oldLogs, true);
+        int nChanges = posUpdate(oldLogs, true);
+        this.updateSendMembershipProbability(nChanges);
     }
-    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+    public void mergeMembershipViews(Map<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
-        posUpdate(oldLogs, false);
+        int nChanges = posUpdate(oldLogs, false);
+        this.updateSendMembershipProbability(nChanges);
     }
-    private void posUpdate(List<MembershipLogRecord> oldLogs, boolean membership) {
+    private int posUpdate(List<MembershipLogRecord> oldLogs, boolean membership) {
         System.out.println(this.getMembershipView());
         var changes = this.membershipView.getMembershipLog().changes(new MembershipLog(oldLogs));
         if (!changes.isEmpty()) {
@@ -235,17 +245,19 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.lastSent = null;
             this.saveLogs();
         }
+        return changes.size();
     }
     public void timerTask() {
         // Compare hashedID with the smaller hashedID online in the cluster view
         boolean smaller = this.isOnline() && id.equals(this.smallestOnline);
-
+        boolean shouldAlarm = this.shouldSendMembershipMessage();
         if (this.executorTimerTask == null && smaller) {
+            if (!shouldAlarm) return;
             System.out.println("Alarm set");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
             this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.MILLISECONDS);
         }
-        else if (this.executorTimerTask != null && !smaller) {
+        else if (this.executorTimerTask != null && (!smaller || !shouldAlarm)) {
             System.out.println("Alarm canceled");
             this.executorTimerTask.shutdown();
             try { this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);}
@@ -493,9 +505,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getClosestMembershipInfo(keyHashed);
     }
-    public String getSmallestMembershipNode() {
-        return this.membershipView.getMembershipTable().getSmallestMembershipNode();
-    }
 
     public void setLastSent(String nodeID) {
         this.lastSent = nodeID;
@@ -579,5 +588,22 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         for (var message : this.pendingRequests.getNodePendingRequests(nodeID)){
             this.redirect(this.getMembershipInfo(nodeID), message);
         }
+    }
+
+
+    public void updateSendMembershipProbability(double nChanges) {
+        if (nChanges == 0) {
+            this.sendMembershipProbability = Math.min(this.sendMembershipProbability + 0.1, 1.0);
+        } else if (nChanges >= 32) {
+            try {
+                ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+                MembershipCollector.collectLight(serverSocket, this, true);
+            } catch (IOException e) {System.out.println("FAILURE - Collecting big membership");}
+        } else {
+            this.sendMembershipProbability = Math.max(this.sendMembershipProbability - 0.2, 0.1);
+        }
+    }
+    public boolean shouldSendMembershipMessage() {
+        return (new Random().nextInt(100) < this.sendMembershipProbability*100);
     }
 }

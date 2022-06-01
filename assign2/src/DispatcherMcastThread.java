@@ -28,7 +28,7 @@ public class DispatcherMcastThread implements Runnable {
                 case "JOIN" -> this.joinHandler(header);
                 case "LEAVE" -> this.leaveHandler(header);
                 case "MEMBERSHIP" -> this.membershipHandler(message);
-                case "REJOIN" -> this.rejoinHandler(header);
+                case "MS_UPDATE" -> this.msUpdateHandler(header, header.containsKey("All"));
                 default -> System.out.println("Type case not implemented");
             }
         } catch (InterruptedException e) {
@@ -36,7 +36,7 @@ public class DispatcherMcastThread implements Runnable {
         }
     }
 
-    private void rejoinHandler(Map<String, String> header) throws InterruptedException {
+    private void msUpdateHandler(Map<String, String> header, boolean all) throws InterruptedException {
         System.out.println("Received rejoin message from " + header.get("NodeIP"));
         String nodeID = header.get("NodeID");
         String nodeIP = header.get("NodeIP");
@@ -46,11 +46,11 @@ public class DispatcherMcastThread implements Runnable {
 
         Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
-        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
+        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView(), all);
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
         catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
 
-        this.store.applyPendingRequests(nodeID);
+        if (!all) this.store.applyPendingRequests(nodeID);
     }
 
     private void joinHandler(Map<String, String> header) throws InterruptedException {
@@ -67,11 +67,13 @@ public class DispatcherMcastThread implements Runnable {
         if (nodeID.equals(this.store.getLastSent())) return; // Must ignore a join message when it already sends the MS view, and it wasn't update in meanwhile
         this.store.setLastSent(nodeID);
 
-        Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
+        if (this.store.shouldSendMembershipMessage() || this.store.getClusterSize() < MembershipCollector.MAX_MS_MSG) {
+            Thread.sleep(new Random().nextInt(MAX_WAIT)); // Wait random time before send membership message
 
-        String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
-        try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
-        catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
+            String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
+            try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
+            catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
+        }
 
         this.store.transferOwnershipOnJoin(nodeID);
         this.store.emptyPendingRequests(nodeID);

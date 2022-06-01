@@ -19,7 +19,7 @@ public class MessageStore extends Message{
      *                          it's a <b>join</b> message, <b>odd</b> values mean it's a <b>leave</b> message
      * @return String containing only a header correctly formatted
      */
-    private static String joinLeaveMessage(String nodeID, String nodeIP, int port, Integer msPort, int msCounter, String type) {
+    private static String joinLeaveMessage(String type, String nodeID, String nodeIP, Integer port, Integer msPort, Integer msCounter, boolean all) {
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
         headerLines.put("Type", type);
@@ -28,6 +28,7 @@ public class MessageStore extends Message{
         headerLines.put("StorePort", String.valueOf(port));
         headerLines.put("MembershipCounter", String.valueOf(msCounter));
         if (msPort != null) headerLines.put("MembershipPort", String.valueOf(msPort));
+        if (all) headerLines.put("All", "true");
 
         // NO BODY IN JOIN/LEAVE MESSAGES!!
 
@@ -35,14 +36,15 @@ public class MessageStore extends Message{
     }
 
     public static String joinMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter, "JOIN");
+        return joinLeaveMessage("JOIN", nodeID, nodeIP, storePort, msPort, membershipCounter, false);
     }
     public static String leaveMessage(String nodeID, String nodeIP, int storePort, int membershipCounter) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, null, membershipCounter, "LEAVE");
+        return joinLeaveMessage("LEAVE", nodeID, nodeIP, storePort, null, membershipCounter, false);
     }
-    public static String rejoinMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter, "REJOIN");
+    public static String msUpdateMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort, boolean all) {
+        return joinLeaveMessage("MS_UPDATE", nodeID, nodeIP, storePort, msPort, membershipCounter, all);
     }
+
 
     public static String putMessage(String key, String value) {
         return Message.putMessage(key, value);
@@ -72,10 +74,15 @@ public class MessageStore extends Message{
      * @return String with a header and a body correctly formatted
      */
     public static String membershipMessage(String nodeID, MembershipView membershipView){
+       return membershipMessage(nodeID, membershipView, false);
+    }
+    public static String membershipMessage(String nodeID, MembershipView membershipView, boolean allLogs){
         // BODY
         StringBuilder body = new StringBuilder();
         var msTable = membershipView.getMembershipTable().toString();
-        var msLog = new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
+        var msLog = allLogs
+                ? new MembershipLog(membershipView.getMembershipLog().getLogs()).toString()
+                : new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
         body.append(msTable);
         body.append("--sep--\n");
         body.append(msLog);
@@ -88,6 +95,7 @@ public class MessageStore extends Message{
 
         return buildHeader(headerLines) + body;
     }
+
 
     public static MembershipView parseMembershipMessage(Message message) {
         MembershipTable membershipTable = new MembershipTable();
