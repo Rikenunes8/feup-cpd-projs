@@ -39,4 +39,8 @@ public class PendingRequests {
     public Map<String, List<String>> getPendingMessages() {
         return pendingMessages;
     }
+
+    public void clear() {
+        this.pendingMessages.clear();
+    }
 }

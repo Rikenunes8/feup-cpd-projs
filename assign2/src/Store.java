@@ -146,6 +146,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         try {
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
             this.incrementMSCounter();
+            this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
 
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
@@ -187,16 +188,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         return true;
     }
-
-    private void transferPendingRequests() {
-        for (int i = 0; i < this.getClusterSize(); i++) {
-            var next = this.membershipView.getNextClosestMembershipInfo(this.id);
-            if (!this.pendingRequests.hasPendingRequests(next.getKey())) {
-                this.redirect(next.getValue(), MessageStore.pendingRequestsMessage(this.pendingRequests.getPendingMessages()));
-            }
-        }
-    }
-
 
     private void initMcastReceiver() throws IOException {
         this.rcvDatagramSocket = new DatagramSocket(null);
@@ -364,6 +355,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             response = this.redirect(closestNode.getValue(), MessageStore.deleteMessage(key));
             if (response == null) { // Assume coordination
                 String replicaDelMessage = MessageStore.replicaDelMessage(key);
+                System.out.println("pref: " + preferenceList); // todo
                 for (var replica : preferenceList) {
                     if (replica.equals(this.id)) continue;
                     this.executor.execute(new OperationReplicatorThread(this, replica, replicaDelMessage));
@@ -399,8 +391,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void transfer(String nodeID, String key, boolean delete) {
         String value = FileUtils.getFile(this.id, key);
         if (value == null) return;
-        this.redirect(getMembershipInfo(nodeID), MessageStore.replicaPutMessage(key, value));
-        if (delete) FileUtils.deleteFile(this.id, key);
+        String message = MessageStore.replicaPutMessage(key, value);
+        String resp = this.redirect(getMembershipInfo(nodeID), message);
+        if (resp == null) this.addPendingRequest(nodeID, message);
+        if (delete) {
+            if (FileUtils.deleteFile(this.id, key)) this.keys.remove(key);
+        }
         System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
 
@@ -409,7 +405,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         for (int i = 0; i < MAX_TRIES; i++) {
             try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage, 500); }
             catch (SocketTimeoutException e) { System.out.println("Message response missed"); }
-            catch (ConnectException e) { break; }
+            catch (ConnectException e) { System.out.println("Connection refused"); }
             catch (IOException e) { e.printStackTrace(); }
         }
         System.out.println("Node " + node.getIP() + " is down");
@@ -446,6 +442,20 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
         }
     }
+
+    private void transferPendingRequests() {
+        for (int i = 0; i < this.getClusterSize(); i++) {
+            var next = this.membershipView.getNextClosestMembershipInfo(this.id);
+            if (!this.pendingRequests.hasPendingRequests(next.getKey())) {
+                System.out.println("Transferring pending requests to " + next.getValue());
+                System.out.println(this.pendingRequests.getPendingMessages());
+                this.redirect(next.getValue(), MessageStore.pendingRequestsMessage(this.pendingRequests.getPendingMessages()));
+                break;
+            }
+        }
+        this.pendingRequests.clear();
+    }
+
 
     // ---------- END OF SERVICE PROTOCOL ---------------
 
@@ -588,13 +598,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.pendingRequests.empty(nodeID);
     }
     public void applyPendingRequests(String nodeID) {
+        System.out.println("Applying pending request for " + nodeID);
         for (var message : this.pendingRequests.getNodePendingRequests(nodeID)){
+            System.out.println("\n" + message + "\n\n");
             this.redirect(this.getMembershipInfo(nodeID), message);
         }
     }
     public void mergePendingRequests(Message message) {
         var receivedRequests = MessageStore.parsePendingRequestsMessage(message);
         for (var key : receivedRequests.keySet()) {
+            System.out.println("Key: " + key + "  List: " + receivedRequests.get(key));
             if (this.pendingRequests.hasPendingRequests(key)) {
                 this.pendingRequests.getNodePendingRequests(key).addAll(receivedRequests.get(key));
             }
@@ -602,6 +615,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 this.pendingRequests.getPendingMessages().put(key, receivedRequests.get(key));
             }
         }
+        System.out.println("Pending requests merged");
+        System.out.println(this.pendingRequests);
     }
 
 

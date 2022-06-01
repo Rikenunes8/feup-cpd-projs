@@ -106,8 +106,8 @@ public class MessageStore extends Message{
             if (line.startsWith("--sep--")) sep = true;
             else if (sep) membershipLog.addMembershipInfo(new MembershipLogRecord(line));
             else {
-                var idInfo = line.split(":", 2);
-                membershipTable.addMembershipInfo(idInfo[0], new MembershipInfo(idInfo[1]));
+                var idInfo = line.split("\\|", 2);
+                membershipTable.addMembershipInfo(idInfo[1], new MembershipInfo(idInfo[0]));
             }
         }
         return new MembershipView(membershipTable, membershipLog);

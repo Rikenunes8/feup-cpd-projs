@@ -1,3 +1,4 @@
+import membership.MembershipLog;
 import membership.MembershipView;
 import messages.MessageStore;
 import messages.TcpMessager;
@@ -50,9 +51,10 @@ public class MembershipCollector {
 
         System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
 
-
+        if (!membershipViews.isEmpty())
+            store.getMembershipView().getMembershipLog().removeLastRecord();
         store.mergeMembershipViews(membershipViews);
-        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+        // store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
 
         System.out.println("Membership views synchronized"); // TODO DEBUG
     }

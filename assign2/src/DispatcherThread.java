@@ -35,8 +35,8 @@ public class DispatcherThread implements Runnable {
             var key = header.getOrDefault("Key", null);
             if (type != null) {
                 switch (type) {
-                    case "JOIN" -> this.store.join();
-                    case "LEAVE" -> this.store.leave();
+                    // case "JOIN" -> this.store.join();
+                    // case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
                         if (!canProcess()) return;
                         response = this.store.put(key, this.message.getBody());
@@ -68,6 +68,7 @@ public class DispatcherThread implements Runnable {
                         TcpMessager.sendMessage(this.socket, response);
                     }
                     case "REQUESTS" -> {
+                        System.out.println("Receiving pending requests");
                         TcpMessager.sendMessage(this.socket, MessageStore.ackMessage("SUCCESS"));
                         if (this.store.isOnline()) this.store.mergePendingRequests(message);
                     }
