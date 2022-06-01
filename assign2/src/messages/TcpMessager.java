@@ -31,6 +31,7 @@ public class TcpMessager {
         int bodySize = 0;
         while (true) {
             String line = reader.readLine();
+            if (line == null) break;
             stringBuilder.append(line).append("\n");
             var entry = parseHeaderEntry(line);
             if (entry == null) break;
