@@ -38,40 +38,34 @@ public class DispatcherThread implements Runnable {
                     case "JOIN" -> this.store.join();
                     case "LEAVE" -> this.store.leave();
                     case "PUT" -> {
-                        if (canProcess()) {
-                            response = this.store.put(key, this.message.getBody());
-                            TcpMessager.sendMessage(this.socket, response);
-                        } else {return;}
+                        if (!canProcess()) return;
+                        response = this.store.put(key, this.message.getBody());
+                        TcpMessager.sendMessage(this.socket, response);
                     }
                     case "GET" -> {
-                        if (canProcess()) {
-                            response = this.store.get(key);
-                            TcpMessager.sendMessage(this.socket, response);
-                        } else {return;}
+                        if (!canProcess()) return;
+                        response = this.store.get(key);
+                        TcpMessager.sendMessage(this.socket, response);
                     }
                     case "DELETE" -> {
-                        if (canProcess()) {
-                            response = this.store.delete(key);
-                            TcpMessager.sendMessage(this.socket, response);
-                        } else {return;}
+                        if (!canProcess()) return;
+                        response = this.store.delete(key);
+                        TcpMessager.sendMessage(this.socket, response);
                     }
                     case "REPLICA_PUT" -> {
-                        if (canProcess()) {
-                            response = this.store.replicaPut(key, this.message.getBody());
-                            TcpMessager.sendMessage(this.socket, response);
-                        } else {return;}
+                        if (!canProcess()) return;
+                        response = this.store.replicaPut(key, this.message.getBody());
+                        TcpMessager.sendMessage(this.socket, response);
                     }
                     case "REPLICA_DEL" -> {
-                        if (canProcess()) {
-                            response = this.store.replicaDel(key);
-                            TcpMessager.sendMessage(this.socket, response);
-                        } else {return;}
+                        if (!canProcess()) return;
+                        response = this.store.replicaDel(key);
+                        TcpMessager.sendMessage(this.socket, response);
                     }
                     case "REPLICA_GET" -> {
-                        if (canProcess()) {
-                            response = this.store.replicaGet(key);
-                            TcpMessager.sendMessage(this.socket, response);
-                        } else {return;}
+                        if (!canProcess()) return;
+                        response = this.store.replicaGet(key);
+                        TcpMessager.sendMessage(this.socket, response);
                     }
                     default -> System.out.println("Type not implemented");
                 }
