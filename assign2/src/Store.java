@@ -33,9 +33,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final Set<String> keys;
     private int membershipCounter;
     private final MembershipView membershipView;
+
     private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
     private String lastSent;
     private String smallestOnline;
+    private PendingRequests pendingRequests;
+
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -96,6 +99,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.keys = new HashSet<>();
         this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
+
+        this.pendingRequests = new PendingRequests();
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
         System.out.println("ID: " + id);
@@ -562,4 +567,17 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         timerTask();
     }
 
+    public void addPendingRequest(String nodeID, String message) {
+        this.pendingRequests.addRequest(nodeID, message);
+    }
+
+    public void emptyPendingRequests(String nodeID) {
+        this.pendingRequests.empty(nodeID);
+    }
+
+    public void applyPendingRequests(String nodeID) {
+        for (var message : this.pendingRequests.getNodePendingRequests(nodeID)){
+            this.redirect(this.getMembershipInfo(nodeID), message);
+        }
+    }
 }

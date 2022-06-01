@@ -49,6 +49,8 @@ public class DispatcherMcastThread implements Runnable {
         String msMsg = MessageStore.membershipMessage(this.store.getId(), this.store.getMembershipView());
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
         catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
+
+        this.store.applyPendingRequests(nodeID);
     }
 
     private void joinHandler(Map<String, String> header) throws InterruptedException {
@@ -72,6 +74,7 @@ public class DispatcherMcastThread implements Runnable {
         catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
 
         this.store.transferOwnershipOnJoin(nodeID);
+        this.store.emptyPendingRequests(nodeID);
     }
 
     private void leaveHandler(Map<String, String> header) {
@@ -81,6 +84,8 @@ public class DispatcherMcastThread implements Runnable {
         int storePort = Integer.parseInt(header.get("StorePort"));
         int msCounter = Integer.parseInt(header.get("MembershipCounter"));
         this.store.updateMembershipView(nodeID, nodeIP, storePort, msCounter);
+
+        this.store.emptyPendingRequests(nodeID);
     }
 
     private void membershipHandler(MessageStore message) {
@@ -90,5 +95,6 @@ public class DispatcherMcastThread implements Runnable {
         this.store.updateMembershipView(view.getMembershipTable(), view.getMembershipLog());
 
         this.store.selectAlarmer(false, nodeId);
+        this.store.applyPendingRequests(nodeId);
     }
 }

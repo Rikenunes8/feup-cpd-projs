@@ -10,9 +10,9 @@ public class OperationReplicatorThread implements Runnable  {
     }
     @Override
     public void run() {
-        String resp = this.store.redirect(this.store.getMembershipInfo(replicaID), this.message);
+        String resp = this.store.redirect(this.store.getMembershipInfo(this.replicaID), this.message);
         if (resp == null) {
-            // TODO save info to try again latter
+            this.store.addPendingRequest(this.replicaID, this.message);
         }
     }
 }
