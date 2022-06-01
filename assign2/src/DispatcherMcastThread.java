@@ -98,9 +98,6 @@ public class DispatcherMcastThread implements Runnable {
         try { TcpMessager.sendMessage(nodeIP, msPort, msMsg); }
         catch (IOException e) { System.out.println("Socket is already closed: " + e.getMessage()); }
 
-        if (!all) {
-            Thread.sleep(1000);
-            this.store.applyPendingRequests(nodeID);
-        }
+        if (!all) this.store.applyPendingRequests(nodeID);
     }
 }

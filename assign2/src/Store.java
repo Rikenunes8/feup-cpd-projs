@@ -57,6 +57,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         Registry registry = LocateRegistry.getRegistry();
         registry.rebind(store.nodeIP+":"+store.storePort, store);
 
+        // If the store went down due to a crash then automatically join on start up
+        if (store.isJoined()) store.execute(new StoreCrashJoinThread(store));
+
         while (true) {
             try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
                 Socket socket = serverSocket.accept();
@@ -129,17 +132,17 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
 
         this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
-
-        // If the store went down due to a crash then automatically join on start up
-        if (this.membershipCounter % 2 == 0) this.joinAfterCrash();
     }
-
 
     // ---------- MEMBERSHIP PROTOCOL -------------
 
+    private boolean isJoined() {
+        return this.membershipCounter % 2 == 0;
+    }
+
     @Override
     public boolean join() {
-        if (this.membershipCounter % 2 == 0) {
+        if (this.isJoined()) {
             System.out.println("This node already belongs to a multicast group");
             return false;
         }
@@ -166,7 +169,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public boolean leave() {
-        if (this.membershipCounter % 2 == 1) {
+        if (!this.isJoined()) {
             System.out.println("This node does not belong to a multicast group");
             return false;
         }
@@ -200,7 +203,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
-    private void joinAfterCrash() {
+    public void joinAfterCrash() {
         try {
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
             MembershipCollector.collectLight(serverSocket, this, false);
@@ -357,8 +360,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 String replicaDelMessage = MessageStore.replicaDelMessage(key);
                 System.out.println("pref: " + preferenceList); // todo
                 for (var replica : preferenceList) {
-                    if (replica.equals(this.id)) continue;
-                    this.executor.execute(new OperationReplicatorThread(this, replica, replicaDelMessage));
+                    if (replica.equals(this.id)) this.replicaDel(key);
+                    else this.executor.execute(new OperationReplicatorThread(this, replica, replicaDelMessage));
                 }
                 response = ackMessage("SUCCESS");
             }
@@ -581,7 +584,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public void selectAlarmer(boolean increment, String nodeID) {
         if (nodeID != null) {
-            smallestOnline = nodeID;
+            if (nodeID.compareTo(smallestOnline) < 0) smallestOnline = nodeID;
         } else if (increment) {
             smallestOnline = this.membershipView.getMembershipTable()
                     .getNextClosestMembershipInfo(smallestOnline).getKey();
