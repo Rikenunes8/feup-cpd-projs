@@ -272,14 +272,22 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 return ackMessage("FAILURE - Couldn't save the file");
             }
 
-            String replicaMessage = MessageStore.replicaPutMessage(key, value);
+            String replicaPutMessage = MessageStore.replicaPutMessage(key, value);
             for (var replica : preferenceList) {
                 if (replica.equals(this.id)) continue;
-                this.executor.execute(new OperationReplicatorThread(this, replica, replicaMessage));
+                this.executor.execute(new OperationReplicatorThread(this, replica, replicaPutMessage));
             }
         }
         else {
             response = this.redirect(closestNode.getValue(), MessageStore.putMessage(key, value));
+            if (response == null) { // Assume coordination
+                String replicaPutMessage = MessageStore.replicaPutMessage(key, value);
+                for (var replica : preferenceList) {
+                    if (replica.equals(this.id)) continue;
+                    this.executor.execute(new OperationReplicatorThread(this, replica, replicaPutMessage));
+                }
+                response = ackMessage("SUCCESS");
+            }
         }
         return response;
     }
@@ -322,7 +330,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 }
                 this.keys.remove(key);
             }
-            this.keys.remove(key);
             response = ackMessage("SUCCESS");
 
             String delReplicaMessage = MessageStore.replicaDelMessage(key);
@@ -333,6 +340,14 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         else {
             response = this.redirect(closestNode.getValue(), MessageStore.deleteMessage(key));
+            if (response == null) { // Assume coordination
+                String replicaDelMessage = MessageStore.replicaDelMessage(key);
+                for (var replica : preferenceList) {
+                    if (replica.equals(this.id)) continue;
+                    this.executor.execute(new OperationReplicatorThread(this, replica, replicaDelMessage));
+                }
+                response = ackMessage("SUCCESS");
+            }
         }
         return response;
     }
@@ -362,15 +377,20 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void transfer(String nodeID, String key, boolean delete) {
         String value = FileUtils.getFile(this.id, key);
         if (value == null) return;
-        String response = this.redirect(getMembershipInfo(nodeID), MessageStore.replicaPutMessage(key, value));
+        this.redirect(getMembershipInfo(nodeID), MessageStore.replicaPutMessage(key, value));
         if (delete) FileUtils.deleteFile(this.id, key);
         System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
 
     public String redirect(MembershipInfo node, String requestMessage) {
-        try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage); }
-        catch (ConnectException e) { System.out.println("Node " + nodeIP + " is down"); } // TODO do something
-        catch (IOException e) { e.printStackTrace(); }
+        int MAX_TRIES = 3;
+        for (int i = 0; i < MAX_TRIES; i++) {
+            try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage, 500); }
+            catch (SocketTimeoutException e) { System.out.println("Message response missed"); }
+            catch (ConnectException e) { break; }
+            catch (IOException e) { e.printStackTrace(); }
+        }
+        System.out.println("Node " + node.getIP() + " is down");
         return null;
     }
 
