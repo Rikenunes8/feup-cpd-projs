@@ -159,9 +159,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
 
-            while (!this.isEmptyPendingQueue()) {
-                this.removeFromPendingQueue().processMessage();
-            }
         } catch (Exception e) {
             System.out.println("Failure joining multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
@@ -542,16 +539,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     public void setLastSent(String nodeID) {
         this.lastSent = nodeID;
-    }
-
-    public void addToPendingQueue(DispatcherThread dispatcherThread) {
-        this.pendingQueue.add(dispatcherThread);
-    }
-    public DispatcherThread removeFromPendingQueue() {
-        return this.pendingQueue.remove();
-    }
-    public boolean isEmptyPendingQueue() {
-        return this.pendingQueue.isEmpty();
     }
 
     public boolean isOnline() {

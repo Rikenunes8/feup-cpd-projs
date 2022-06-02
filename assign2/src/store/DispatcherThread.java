@@ -32,65 +32,36 @@ public class DispatcherThread implements Runnable {
     public void processMessage() {
         try {
             String response = MessageStore.ackMessage("FAILURE - Not online");
-            Map<String, String> header = this.message.getHeader();
-            var type = header.getOrDefault("Type", null);
-            var key = header.getOrDefault("Key", null);
-            if (type != null) {
-                System.out.println("Received " + type + " message");
-                switch (type) {
-                    // case "JOIN" -> this.store.join();
-                    // case "LEAVE" -> this.store.leave();
-                    case "PUT" -> {
-                        if (!canProcess()) return;
-                        response = this.store.put(key, this.message.getBody());
-                        TcpMessager.sendMessage(this.socket, response);
+            if (this.store.isOnline()) {
+                Map<String, String> header = this.message.getHeader();
+                var type = header.getOrDefault("Type", null);
+                var key = header.getOrDefault("Key", null);
+                if (type != null) {
+                    System.out.println("Received " + type + " message");
+                    switch (type) {
+                        case "PUT" -> response = this.store.put(key, this.message.getBody());
+                        case "GET" -> response = this.store.get(key);
+                        case "DELETE" -> response = this.store.delete(key);
+                        case "REPLICA_PUT" -> response = this.store.replicaPut(key, this.message.getBody());
+                        case "REPLICA_DEL" -> response = this.store.replicaDel(key);
+                        case "REPLICA_GET" -> response = this.store.replicaGet(key);
+                        case "REQUESTS" -> {
+                            response = MessageStore.ackMessage("SUCCESS");
+                            TcpMessager.sendMessage(this.socket, response);
+                            this.store.mergePendingRequests(message);
+                            this.socket.close();
+                            return;
+                        }
+                        default -> response = MessageStore.ackMessage("Type not implemented");
                     }
-                    case "GET" -> {
-                        if (!canProcess()) return;
-                        response = this.store.get(key);
-                        TcpMessager.sendMessage(this.socket, response);
-                    }
-                    case "DELETE" -> {
-                        if (!canProcess()) return;
-                        response = this.store.delete(key);
-                        TcpMessager.sendMessage(this.socket, response);
-                    }
-                    case "REPLICA_PUT" -> {
-                        if (!canProcess()) return;
-                        response = this.store.replicaPut(key, this.message.getBody());
-                        TcpMessager.sendMessage(this.socket, response);
-                    }
-                    case "REPLICA_DEL" -> {
-                        if (!canProcess()) return;
-                        response = this.store.replicaDel(key);
-                        TcpMessager.sendMessage(this.socket, response);
-                    }
-                    case "REPLICA_GET" -> {
-                        if (!canProcess()) return;
-                        response = this.store.replicaGet(key);
-                        TcpMessager.sendMessage(this.socket, response);
-                    }
-                    case "REQUESTS" -> {
-                        TcpMessager.sendMessage(this.socket, MessageStore.ackMessage("SUCCESS"));
-                        if (this.store.isOnline()) this.store.mergePendingRequests(message);
-                    }
-                    default -> System.out.println("Type not implemented");
+                } else {
+                    response = MessageStore.ackMessage("Invalid Message!");
                 }
-            } else {
-                System.out.println("Invalid Message!");
             }
+            TcpMessager.sendMessage(this.socket, response);
             this.socket.close();
         } catch (IOException e) {
             System.out.println(e.getMessage());
         }
-    }
-
-    private boolean canProcess() {
-        if (!store.isOnline()) {
-            System.out.println("Will process it latter");
-            store.addToPendingQueue(this);
-            return false;
-        }
-        return true;
     }
 }
