@@ -213,6 +213,8 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
             this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
+
+            this.transferOwnershipOnRejoin();
         }
         catch (IOException e) {throw new RuntimeException(e);}
     }
@@ -417,14 +419,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         return null;
     }
 
-    public void transferOwnershipOnLeave() {
-        var keysCopy = new HashSet<>(this.keys);
-        for (String key : keysCopy) {
-            var preferenceList = this.getPreferenceList(key);
-            if (preferenceList.size() < REPLICATION_FACTOR) this.replicaDel(key);
-            else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
-        }
-    }
     public void transferOwnershipOnJoin(String nodeID) {
         if (this.getClusterSize() <= 1) return;
         var keysCopy = new HashSet<>(this.getKeys());
@@ -447,8 +441,28 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
         }
     }
+    public void transferOwnershipOnLeave() {
+        var keysCopy = new HashSet<>(this.keys);
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            if (preferenceList.size() < REPLICATION_FACTOR) this.replicaDel(key);
+            else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
+        }
+    }
+    public void transferOwnershipOnRejoin() {
+        if (this.getClusterSize() <= 1) return;
+        var keysCopy = new HashSet<>(this.getKeys());
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            if (!preferenceList.contains(this.id)) {
+                for (var replica : preferenceList) {
+                    this.transfer(replica, key, true);
+                }
+            }
+        }
+    }
 
-    private void transferPendingRequests() {
+        private void transferPendingRequests() {
         for (int i = 0; i < this.getClusterSize(); i++) {
             var next = this.membershipView.getNextClosestMembershipInfo(this.id);
             if (!this.pendingRequests.hasPendingRequests(next.getKey())) {
@@ -628,12 +642,13 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void updateSendMembershipProbability(double nChanges) {
         if (nChanges == 0) {
             this.sendMembershipProbability = Math.min(this.sendMembershipProbability + 0.1, 1.0);
-        } else if (nChanges >= 32) {
-            try {
-                ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
-                MembershipCollector.collectLight(serverSocket, this, true);
-            } catch (IOException e) {System.out.println("FAILURE - Collecting big membership");}
         } else {
+            if (nChanges >= 32) {
+                try {
+                    ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+                    MembershipCollector.collectLight(serverSocket, this, true);
+                } catch (IOException e) {System.out.println("FAILURE - Collecting big membership");}
+            }
             this.sendMembershipProbability = Math.max(this.sendMembershipProbability - 0.2, 0.1);
         }
     }
