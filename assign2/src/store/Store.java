@@ -189,6 +189,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         try {
             System.out.println("Rejoining...");
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+            this.membershipView.setMembershipTable(new MembershipTable(this.id, new MembershipInfo(this.nodeIP, this.storePort)));
             MembershipCollector.collectLight(serverSocket, this, false);
             initMcastReceiver();
             this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
@@ -547,7 +548,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
         }
         System.out.println("Pending requests merged");
-        System.out.println(this.pendingRequests);
     }
 
     public void updateSendMembershipProbability(double nChanges) {
@@ -562,9 +562,10 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
             this.sendMembershipProbability = Math.max(this.sendMembershipProbability - 0.2, 0.0);
         }
+        System.out.println("New Probability: " + this.sendMembershipProbability);
     }
     public boolean shouldSendMembershipMessage() {
-        return (this.sendMembershipProbability > 0.7);
+        return (this.sendMembershipProbability > 0.5);
     }
 
     // -------------- END OF UTILS ----------------

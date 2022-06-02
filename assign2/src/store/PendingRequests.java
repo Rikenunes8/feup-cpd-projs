@@ -1,9 +1,10 @@
 package store;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class PendingRequests {
-    private final Map<String, List<String>> pendingMessages;
+    private final Map<String, AbstractQueue<String>> pendingMessages;
 
 
     public PendingRequests() {
@@ -15,7 +16,7 @@ public class PendingRequests {
             this.pendingMessages.get(nodeID).add(message);
         }
         else {
-            List<String> messages = new ArrayList<>();
+            AbstractQueue<String> messages = new ConcurrentLinkedQueue<>();
             messages.add(message);
             this.pendingMessages.put(nodeID, messages);
         }
@@ -29,16 +30,16 @@ public class PendingRequests {
         this.pendingMessages.remove(nodeID);
     }
 
-    public List<String> getNodePendingRequests(String nodeID) {
+    public AbstractQueue<String> getNodePendingRequests(String nodeID) {
         if (this.pendingMessages.containsKey(nodeID)) {
-            List<String> requests = this.pendingMessages.get(nodeID);
+            AbstractQueue<String> requests = this.pendingMessages.get(nodeID);
             this.pendingMessages.remove(nodeID);
             return requests;
         }
-        return new ArrayList<>();
+        return new ConcurrentLinkedQueue<>();
     }
 
-    public Map<String, List<String>> getPendingMessages() {
+    public Map<String, AbstractQueue<String>> getPendingMessages() {
         return pendingMessages;
     }
 

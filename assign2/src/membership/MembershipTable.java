@@ -9,6 +9,10 @@ public class MembershipTable {
     public MembershipTable() {
         this.membershipInfoMap = new TreeMap<>();
     }
+    public MembershipTable(String id, MembershipInfo msInfo) {
+        this.membershipInfoMap = new TreeMap<>();
+        this.addMembershipInfo(id, msInfo);
+    }
 
     public void addMembershipInfo(String id, MembershipInfo msInfo) {
         this.membershipInfoMap.put(id, msInfo);

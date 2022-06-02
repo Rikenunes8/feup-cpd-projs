@@ -3,6 +3,7 @@ package messages;
 import membership.*;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MessageStore extends Message{
     public MessageStore(String msg) {
@@ -113,7 +114,7 @@ public class MessageStore extends Message{
         return new MembershipView(membershipTable, membershipLog);
     }
 
-    public static String pendingRequestsMessage(Map<String, List<String>> pendingRequests) {
+    public static String pendingRequestsMessage(Map<String, AbstractQueue<String>> pendingRequests) {
         // BODY
         StringBuilder body = new StringBuilder();
         for (String key : pendingRequests.keySet()) {
@@ -131,15 +132,15 @@ public class MessageStore extends Message{
         return buildHeader(headerLines) + body;
     }
 
-    public static Map<String, List<String>> parsePendingRequestsMessage(Message message) {
-        Map<String, List<String>> map = new HashMap<>();
+    public static Map<String, AbstractQueue<String>> parsePendingRequestsMessage(Message message) {
+        Map<String, AbstractQueue<String>> map = new HashMap<>();
         String body = message.getBody();
         var keysSections = body.split("\\$KEY\\$");
         for (var aux : keysSections) {
             var aux2 = aux.split("\\$MSG\\$");
             if (aux2.length < 2)  continue;
             String key = aux2[0];
-            List<String> msgs = new ArrayList<>();
+            AbstractQueue<String> msgs = new ConcurrentLinkedQueue<>();
             for (int i = 1; i < aux2.length; i++) {
                 msgs.add(aux2[i]);
             }

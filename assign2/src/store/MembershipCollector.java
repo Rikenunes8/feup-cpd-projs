@@ -80,7 +80,7 @@ public class MembershipCollector {
         System.out.println("Membership Views received: " + membershipViews.size());
 
         store.mergeMembershipViews(membershipViews);
-        //store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+        // store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
 
         System.out.println("Membership Views synchronized");
     }
