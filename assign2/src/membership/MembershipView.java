@@ -31,7 +31,7 @@ public class MembershipView {
         return this.membershipTable.getNextClosestMembershipInfo(keyHashed);
     }
 
-    public boolean isOnline(String keyHashed) {
+    public boolean isInMembershipTable(String keyHashed) {
         return this.membershipTable.getMembershipInfoMap().containsKey(keyHashed);
     }
 
@@ -50,7 +50,7 @@ public class MembershipView {
 
     public void synchronizeTable() {
         for (var log : this.membershipLog.getLogs()) {
-            if (log.getCounter() % 2 == 0) continue; // TODO if a node was supposed to be in cluster should do something
+            if (log.getCounter() % 2 == 0) continue;
             if (this.membershipTable.getMembershipInfoMap().containsKey(log.getNodeID())) {
                 this.membershipTable.removeMembershipInfo(log.getNodeID());
             }
@@ -68,6 +68,6 @@ public class MembershipView {
 
     @Override
     public String toString() {
-        return "+----\n" + this.getMembershipTable().toString() + "-----\n" + this.getMembershipLog().toString() + "+-----\n";
+        return "+---- MS Table\n" + this.getMembershipTable().toString() + "+---- MS Logs\n" + this.getMembershipLog().toString() + "+-----\n";
     }
 }

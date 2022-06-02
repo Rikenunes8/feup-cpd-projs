@@ -2,7 +2,6 @@ package membership;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class MembershipLog {
     private final List<MembershipLogRecord> logs;
@@ -44,12 +43,8 @@ public class MembershipLog {
         }
     }
 
-    public boolean hasChanged(MembershipLog oldMembershipLog) {
-        // Has changed if only one of the MembershipLog is empty or if the last log does not match
-        if (!this.logs.isEmpty() && !oldMembershipLog.logs.isEmpty())
-            return this.logs.get(this.logs.size()-1) != oldMembershipLog.logs.get(oldMembershipLog.logs.size()-1);
-        else
-            return !(this.logs.isEmpty() && oldMembershipLog.logs.isEmpty());
+    public void removeLastRecord() {
+        this.logs.remove(this.logs.size()-1);
     }
 
     public List<MembershipLogRecord> changes(MembershipLog oldMembershipLog) {

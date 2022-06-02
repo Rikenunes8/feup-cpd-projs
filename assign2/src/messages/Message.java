@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Message {
-    String message;
     Map<String, String> header;
     String body;
 
@@ -14,13 +13,8 @@ public class Message {
     public String getBody() {
         return body;
     }
-    public String getAllMessage() {
-        return message;
-    }
 
     public Message(String msg) {
-        this.message = msg;
-
         String[] msgArr = msg.split("\n\n", 2);
 
         String header = msgArr[0];
@@ -28,6 +22,7 @@ public class Message {
         this.header = new HashMap<>();
         for (String headerLine : headerLines) {
             String[] keyVal = headerLine.split(": ");
+            if (keyVal.length < 2) continue;
             this.header.put(keyVal[0], keyVal[1]);
         }
         this.body = msgArr.length < 2 ?  "" : msgArr[1];

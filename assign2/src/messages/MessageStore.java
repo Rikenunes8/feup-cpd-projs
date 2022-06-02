@@ -2,9 +2,8 @@ package messages;
 
 import membership.*;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MessageStore extends Message{
     public MessageStore(String msg) {
@@ -19,7 +18,7 @@ public class MessageStore extends Message{
      *                          it's a <b>join</b> message, <b>odd</b> values mean it's a <b>leave</b> message
      * @return String containing only a header correctly formatted
      */
-    private static String joinLeaveMessage(String nodeID, String nodeIP, int port, Integer msPort, int msCounter, String type) {
+    private static String joinLeaveMessage(String type, String nodeID, String nodeIP, Integer port, Integer msPort, Integer msCounter, boolean all) {
         // Setting up the header
         Map<String, String> headerLines = new HashMap<>();
         headerLines.put("Type", type);
@@ -28,6 +27,7 @@ public class MessageStore extends Message{
         headerLines.put("StorePort", String.valueOf(port));
         headerLines.put("MembershipCounter", String.valueOf(msCounter));
         if (msPort != null) headerLines.put("MembershipPort", String.valueOf(msPort));
+        if (all) headerLines.put("All", "true");
 
         // NO BODY IN JOIN/LEAVE MESSAGES!!
 
@@ -35,14 +35,15 @@ public class MessageStore extends Message{
     }
 
     public static String joinMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter, "JOIN");
+        return joinLeaveMessage("JOIN", nodeID, nodeIP, storePort, msPort, membershipCounter, false);
     }
     public static String leaveMessage(String nodeID, String nodeIP, int storePort, int membershipCounter) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, null, membershipCounter, "LEAVE");
+        return joinLeaveMessage("LEAVE", nodeID, nodeIP, storePort, null, membershipCounter, false);
     }
-    public static String rejoinMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort) {
-        return joinLeaveMessage(nodeID, nodeIP, storePort, msPort, membershipCounter, "REJOIN");
+    public static String msUpdateMessage(String nodeID, String nodeIP, int storePort, int membershipCounter, int msPort, boolean all) {
+        return joinLeaveMessage("MS_UPDATE", nodeID, nodeIP, storePort, msPort, membershipCounter, all);
     }
+
 
     public static String putMessage(String key, String value) {
         return Message.putMessage(key, value);
@@ -72,10 +73,15 @@ public class MessageStore extends Message{
      * @return String with a header and a body correctly formatted
      */
     public static String membershipMessage(String nodeID, MembershipView membershipView){
+       return membershipMessage(nodeID, membershipView, false);
+    }
+    public static String membershipMessage(String nodeID, MembershipView membershipView, boolean allLogs){
         // BODY
         StringBuilder body = new StringBuilder();
         var msTable = membershipView.getMembershipTable().toString();
-        var msLog = new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
+        var msLog = allLogs
+                ? new MembershipLog(membershipView.getMembershipLog().getLogs()).toString()
+                : new MembershipLog(membershipView.getMembershipLog().last32Logs()).toString();
         body.append(msTable);
         body.append("--sep--\n");
         body.append(msLog);
@@ -89,6 +95,7 @@ public class MessageStore extends Message{
         return buildHeader(headerLines) + body;
     }
 
+
     public static MembershipView parseMembershipMessage(Message message) {
         MembershipTable membershipTable = new MembershipTable();
         MembershipLog membershipLog = new MembershipLog();
@@ -100,10 +107,45 @@ public class MessageStore extends Message{
             if (line.startsWith("--sep--")) sep = true;
             else if (sep) membershipLog.addMembershipInfo(new MembershipLogRecord(line));
             else {
-                var idInfo = line.split(":", 2);
-                membershipTable.addMembershipInfo(idInfo[0], new MembershipInfo(idInfo[1]));
+                var idInfo = line.split("\\|", 2);
+                membershipTable.addMembershipInfo(idInfo[1], new MembershipInfo(idInfo[0]));
             }
         }
         return new MembershipView(membershipTable, membershipLog);
+    }
+
+    public static String pendingRequestsMessage(Map<String, AbstractQueue<String>> pendingRequests) {
+        // BODY
+        StringBuilder body = new StringBuilder();
+        for (String key : pendingRequests.keySet()) {
+            body.append("$KEY$").append(key);
+            for (var message : pendingRequests.get(key)) {
+                body.append("$MSG$").append(message);
+            }
+        }
+
+        // Setting up the header
+        Map<String, String> headerLines = new HashMap<>();
+        headerLines.put("Type", "REQUESTS" );
+        headerLines.put("BodySize", String.valueOf(body.toString().length()));
+
+        return buildHeader(headerLines) + body;
+    }
+
+    public static Map<String, AbstractQueue<String>> parsePendingRequestsMessage(Message message) {
+        Map<String, AbstractQueue<String>> map = new HashMap<>();
+        String body = message.getBody();
+        var keysSections = body.split("\\$KEY\\$");
+        for (var aux : keysSections) {
+            var aux2 = aux.split("\\$MSG\\$");
+            if (aux2.length < 2)  continue;
+            String key = aux2[0];
+            AbstractQueue<String> msgs = new ConcurrentLinkedQueue<>();
+            for (int i = 1; i < aux2.length; i++) {
+                msgs.add(aux2[i]);
+            }
+            map.put(key, msgs);
+        }
+        return map;
     }
 }

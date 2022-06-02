@@ -9,6 +9,10 @@ public class MembershipTable {
     public MembershipTable() {
         this.membershipInfoMap = new TreeMap<>();
     }
+    public MembershipTable(String id, MembershipInfo msInfo) {
+        this.membershipInfoMap = new TreeMap<>();
+        this.addMembershipInfo(id, msInfo);
+    }
 
     public void addMembershipInfo(String id, MembershipInfo msInfo) {
         this.membershipInfoMap.put(id, msInfo);
@@ -60,8 +64,8 @@ public class MembershipTable {
     public String toString(){
         StringBuilder ret = new StringBuilder();
         for (var key : this.membershipInfoMap.keySet()){
-            ret.append(key).append(":");
             ret.append(this.membershipInfoMap.get(key).toString());
+            ret.append("|").append(key);
             ret.append("\n");
         }
         return ret.toString();

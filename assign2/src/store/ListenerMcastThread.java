@@ -1,3 +1,5 @@
+package store;
+
 import messages.MulticastMessager;
 
 import java.io.IOException;

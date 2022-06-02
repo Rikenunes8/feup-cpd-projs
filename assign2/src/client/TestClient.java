@@ -1,4 +1,6 @@
+package client;
 
+import store.IMembership;
 import messages.MessageClient;
 import messages.TcpMessager;
 import utils.HashUtils;

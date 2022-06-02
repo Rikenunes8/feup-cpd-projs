@@ -1,3 +1,5 @@
+package store;
+
 import membership.*;
 
 import static messages.Message.ackMessage;
@@ -5,6 +7,7 @@ import static messages.MulticastMessager.*;
 import static messages.MessageStore.leaveMessage;
 import static utils.FileUtils.sub;
 
+import messages.Message;
 import messages.MessageStore;
 import messages.TcpMessager;
 import utils.FileUtils;
@@ -33,9 +36,12 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     private final Set<String> keys;
     private int membershipCounter;
     private final MembershipView membershipView;
-    private final ConcurrentLinkedQueue<DispatcherThread> pendingQueue;
+    private double sendMembershipProbability;
+
     private String lastSent;
     private String smallestOnline;
+    private final PendingRequests pendingRequests;
+
 
     private final NetworkInterface networkInterface;
     private final InetSocketAddress inetSocketAddress;
@@ -52,6 +58,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         Registry registry = LocateRegistry.getRegistry();
         registry.rebind(store.nodeIP+":"+store.storePort, store);
 
+        // If the store went down due to a crash then automatically join on start up
+        if (store.isJoined()) store.execute(new StoreCrashJoinThread(store));
+
         while (true) {
             try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
                 Socket socket = serverSocket.accept();
@@ -65,7 +74,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
 
     private static String usage() {
-        return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
+        return "Usage:\n\t java Store.Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
     }
     private static Store parseArgs(String[] args) throws RemoteException{
         InetAddress mcastAddr;
@@ -94,8 +103,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.storePort = storePort;
 
         this.keys = new HashSet<>();
-        this.pendingQueue = new ConcurrentLinkedQueue<>();
         this.membershipView = new MembershipView(new MembershipTable(), new MembershipLog());
+        this.sendMembershipProbability = 1.0;
+        this.pendingRequests = new PendingRequests();
 
         this.id = HashUtils.getHashedSha256(this.getNodeIPPort());
         System.out.println("ID: " + id);
@@ -106,10 +116,9 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.loadLogs();
         this.loadKeys();
 
-        String networkInterfaceStr = "loopback"; // TODO
         try {
             this.sndDatagramSocket = new DatagramSocket();
-            this.networkInterface = NetworkInterface.getByName(networkInterfaceStr);
+            this.networkInterface = NetworkInterface.getByName("loopback");
             this.inetSocketAddress = new InetSocketAddress(this.mcastAddr, this.mcastPort);
 
             if (this.networkInterface != null) {
@@ -121,23 +130,21 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
 
         this.executor = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
-
-        // If the store went down due to a crash then automatically join on start up
-        if (this.membershipCounter % 2 == 0) this.joinAfterCrash();
     }
-
 
     // ---------- MEMBERSHIP PROTOCOL -------------
 
     @Override
     public boolean join() {
-        if (this.membershipCounter % 2 == 0) {
+        if (this.isJoined()) {
             System.out.println("This node already belongs to a multicast group");
             return false;
         }
         try {
+            System.out.println("Joining...");
             ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
             this.incrementMSCounter();
+            this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
 
             MembershipCollector.collect(serverSocket, this);
             initMcastReceiver();
@@ -145,9 +152,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
             this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
 
-            while (!this.isEmptyPendingQueue()) {
-                this.removeFromPendingQueue().processMessage();
-            }
         } catch (Exception e) {
             System.out.println("Failure joining multicast group " + this.mcastAddr + ":" + this.mcastPort);
             System.out.println(e.getMessage());
@@ -157,15 +161,17 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
 
     @Override
     public boolean leave() {
-        if (this.membershipCounter % 2 == 1) {
+        if (!this.isJoined()) {
             System.out.println("This node does not belong to a multicast group");
             return false;
         }
         try {
+            System.out.println("Leaving...");
             this.incrementMSCounter();
             this.updateMembershipView(this.id, this.nodeIP, this.storePort, this.membershipCounter);
 
             transferOwnershipOnLeave();
+            transferPendingRequests();
 
             // Notice cluster members of my leave
             String msg = leaveMessage(this.id, this.nodeIP, this.storePort, this.membershipCounter);
@@ -179,7 +185,21 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         return true;
     }
 
+    public void rejoin() {
+        try {
+            System.out.println("Rejoining...");
+            ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+            this.membershipView.setMembershipTable(new MembershipTable(this.id, new MembershipInfo(this.nodeIP, this.storePort)));
+            MembershipCollector.collectLight(serverSocket, this, false);
+            initMcastReceiver();
+            this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
 
+            this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
+
+            this.transferOwnershipOnRejoin();
+        }
+        catch (IOException e) {throw new RuntimeException(e);}
+    }
     private void initMcastReceiver() throws IOException {
         this.rcvDatagramSocket = new DatagramSocket(null);
         this.rcvDatagramSocket.setReuseAddress(true);
@@ -191,17 +211,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         this.rcvDatagramSocket.leaveGroup(this.inetSocketAddress, this.networkInterface);
         this.rcvDatagramSocket = null;
     }
-    private void joinAfterCrash() {
-        try {
-            ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
-            MembershipCollector.collectLight(serverSocket, this);
-            initMcastReceiver();
-            this.listenerMcastFuture = this.executor.submit(new ListenerMcastThread(this));
-
-            this.selectAlarmer(false, null); // Decide if this node should trigger the alarm
-        }
-        catch (IOException e) {throw new RuntimeException(e);}
-    }
 
     public void updateMembershipView(String id, String ip, int port, int membershipCounter) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
@@ -212,14 +221,16 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void updateMembershipView(MembershipTable membershipTable, MembershipLog membershipLog) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.merge(membershipTable, membershipLog);
-        posUpdate(oldLogs, true);
+        int nChanges = posUpdate(oldLogs, true);
+        this.updateSendMembershipProbability(nChanges);
     }
-    public void mergeMembershipViews(ConcurrentHashMap<String, MembershipView> membershipViews) {
+    public void mergeMembershipViews(Map<String, MembershipView> membershipViews) {
         var oldLogs = new ArrayList<>(this.membershipView.getMembershipLog().getLogs());
         this.membershipView.mergeMembershipViews(membershipViews);
-        posUpdate(oldLogs, false);
+        int nChanges = posUpdate(oldLogs, false);
+        this.updateSendMembershipProbability(nChanges);
     }
-    private void posUpdate(List<MembershipLogRecord> oldLogs, boolean membership) {
+    private int posUpdate(List<MembershipLogRecord> oldLogs, boolean membership) {
         System.out.println(this.getMembershipView());
         var changes = this.membershipView.getMembershipLog().changes(new MembershipLog(oldLogs));
         if (!changes.isEmpty()) {
@@ -230,25 +241,39 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             this.lastSent = null;
             this.saveLogs();
         }
+        return changes.size();
     }
-    public void timerTask() {
+
+    private void timerTask() {
         // Compare hashedID with the smaller hashedID online in the cluster view
         boolean smaller = this.isOnline() && id.equals(this.smallestOnline);
-
+        boolean shouldAlarm = this.shouldSendMembershipMessage();
         if (this.executorTimerTask == null && smaller) {
+            if (!shouldAlarm) return;
             System.out.println("Alarm set");
             this.executorTimerTask = Executors.newScheduledThreadPool(1);
             this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.MILLISECONDS);
         }
-        else if (this.executorTimerTask != null && !smaller) {
+        else if (this.executorTimerTask != null && (!smaller || !shouldAlarm)) {
             System.out.println("Alarm canceled");
             this.executorTimerTask.shutdown();
             try { this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);}
-            catch (InterruptedException e) { e.printStackTrace(); } // TODO
+            catch (InterruptedException e) {System.out.println("Alarm shutdown interrupted");}
 
             if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
             this.executorTimerTask = null;
         }
+    }
+    public void selectAlarmer(boolean increment, String nodeID) {
+        if (nodeID != null) {
+            if (nodeID.compareTo(smallestOnline) < 0) smallestOnline = nodeID;
+        } else if (increment) {
+            smallestOnline = this.membershipView.getMembershipTable()
+                    .getNextClosestMembershipInfo(smallestOnline).getKey();
+        } else {
+            smallestOnline = this.membershipView.getMembershipTable().getSmallestMembershipNode();
+        }
+        this.timerTask();
     }
 
     // ---------- END OF MEMBERSHIP PROTOCOL ---------------
@@ -272,18 +297,25 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 return ackMessage("FAILURE - Couldn't save the file");
             }
 
-            String replicaMessage = MessageStore.replicaPutMessage(key, value);
+            String replicaPutMessage = MessageStore.replicaPutMessage(key, value);
             for (var replica : preferenceList) {
                 if (replica.equals(this.id)) continue;
-                this.executor.execute(new OperationReplicatorThread(this, replica, replicaMessage));
+                this.executor.execute(new OperationReplicatorThread(this, replica, replicaPutMessage));
             }
         }
         else {
             response = this.redirect(closestNode.getValue(), MessageStore.putMessage(key, value));
+            if (response == null) { // Assume coordination
+                String replicaPutMessage = MessageStore.replicaPutMessage(key, value);
+                for (var replica : preferenceList) {
+                    if (replica.equals(this.id)) continue;
+                    this.executor.execute(new OperationReplicatorThread(this, replica, replicaPutMessage));
+                }
+                response = ackMessage("SUCCESS");
+            }
         }
         return response;
     }
-
     @Override
     public String get(String key) {
         if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
@@ -299,15 +331,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             try (Socket socket = new Socket(node.getIP(), node.getPort())) {
                 TcpMessager.sendMessage(socket, requestMessage);
                 socket.setSoTimeout(2000);
-                return TcpMessager.receiveMessage(socket);
+                String resp = TcpMessager.receiveMessage(socket);
+                if (new Message(resp).getBody().startsWith("FAILURE -")) continue; // If a node has not the key try other replica
+                return resp;
             }  catch (IOException e) {
-                System.out.println("Node of get unreachable");
+                System.out.println("Node with the file is unreachable");
             }
         }
-
         return ackMessage("FAILURE - Couldn't find the file required");
     }
-
     @Override
     public String delete(String key) {
         if (key == null) return ackMessage("FAILURE - Key \"null\" doesn't exist");
@@ -322,7 +354,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
                 }
                 this.keys.remove(key);
             }
-            this.keys.remove(key);
             response = ackMessage("SUCCESS");
 
             String delReplicaMessage = MessageStore.replicaDelMessage(key);
@@ -333,6 +364,14 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         }
         else {
             response = this.redirect(closestNode.getValue(), MessageStore.deleteMessage(key));
+            if (response == null) { // Assume coordination
+                String replicaDelMessage = MessageStore.replicaDelMessage(key);
+                for (var replica : preferenceList) {
+                    if (replica.equals(this.id)) this.replicaDel(key);
+                    else this.executor.execute(new OperationReplicatorThread(this, replica, replicaDelMessage));
+                }
+                response = ackMessage("SUCCESS");
+            }
         }
         return response;
     }
@@ -362,26 +401,27 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public void transfer(String nodeID, String key, boolean delete) {
         String value = FileUtils.getFile(this.id, key);
         if (value == null) return;
-        String response = this.redirect(getMembershipInfo(nodeID), MessageStore.replicaPutMessage(key, value));
-        if (delete) FileUtils.deleteFile(this.id, key);
+        String message = MessageStore.replicaPutMessage(key, value);
+        String resp = this.redirect(getMembershipInfo(nodeID), message);
+        if (resp == null) this.addPendingRequest(nodeID, message);
+        if (delete) {
+            if (FileUtils.deleteFile(this.id, key)) this.keys.remove(key);
+        }
         System.out.println("Key " + sub(key) + " transferred to node " + sub(nodeID) + (delete ? " with deletion" : ""));
     }
 
     public String redirect(MembershipInfo node, String requestMessage) {
-        try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage); }
-        catch (ConnectException e) { System.out.println("Node " + nodeIP + " is down"); } // TODO do something
-        catch (IOException e) { e.printStackTrace(); }
+        final int MAX_TRIES = 3;
+        for (int i = 0; i < MAX_TRIES; i++) {
+            try { return TcpMessager.sendAndReceiveMessage(node.getIP(), node.getPort(), requestMessage, 500); }
+            catch (SocketTimeoutException e) { System.out.println("Message response missed"); }
+            catch (ConnectException e) { System.out.println("Connection refused"); }
+            catch (IOException e) { e.printStackTrace(); }
+        }
+        System.out.println("Node " + node.getIP() + " is down");
         return null;
     }
 
-    public void transferOwnershipOnLeave() {
-        var keysCopy = new HashSet<>(this.keys);
-        for (String key : keysCopy) {
-            var preferenceList = this.getPreferenceList(key);
-            if (preferenceList.size() < REPLICATION_FACTOR) this.replicaDel(key);
-            else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
-        }
-    }
     public void transferOwnershipOnJoin(String nodeID) {
         if (this.getClusterSize() <= 1) return;
         var keysCopy = new HashSet<>(this.getKeys());
@@ -404,8 +444,133 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
         }
     }
+    private void transferOwnershipOnLeave() {
+        var keysCopy = new HashSet<>(this.keys);
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            if (preferenceList.size() < REPLICATION_FACTOR) this.replicaDel(key);
+            else this.transfer(preferenceList.get(REPLICATION_FACTOR-1), key, true);
+        }
+    }
+    private void transferOwnershipOnRejoin() {
+        if (this.getClusterSize() <= 1) return;
+
+        var keysCopy = new HashSet<>(this.getKeys());
+        for (String key : keysCopy) {
+            var preferenceList = this.getPreferenceList(key);
+            if (!preferenceList.contains(this.id)) {
+                for (var replica : preferenceList) {
+                    this.transfer(replica, key, false);
+                }
+                this.replicaDel(key);
+            }
+        }
+    }
+
+    private void transferPendingRequests() {
+        for (int i = 0; i < this.getClusterSize(); i++) {
+            var next = this.membershipView.getNextClosestMembershipInfo(this.id);
+            if (!this.pendingRequests.hasPendingRequests(next.getKey())) {
+                System.out.println("Transferring pending requests to " + next.getValue());
+                this.redirect(next.getValue(), MessageStore.pendingRequestsMessage(this.pendingRequests.getPendingMessages()));
+                break;
+            }
+        }
+        this.pendingRequests.clear();
+    }
+
 
     // ---------- END OF SERVICE PROTOCOL ---------------
+
+    // ----------- UTILS ---------------
+
+    public boolean isOnline() {
+        return this.membershipView.isInMembershipTable(this.id);
+    }
+    private boolean isJoined() {
+        return this.membershipCounter % 2 == 0;
+    }
+
+    public void execute(Runnable runnable) {
+        this.executor.execute(runnable);
+    }
+
+    public void startMSCounter(){
+        // check if counter is stored in NV-memory
+        String storedCounter = FileUtils.getFile(this.id, "membershipCounter");
+        this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
+    }
+    public void incrementMSCounter(){
+        this.membershipCounter++;
+        FileUtils.saveFile(this.id, "membershipCounter", String.valueOf(this.membershipCounter));
+    }
+    public void saveLogs(){
+        FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
+    }
+    public void loadLogs(){
+        String storedLogs = FileUtils.getFile(this.id, "membershipLogs");
+        if (storedLogs == null) {
+            System.out.println("No previous logs found...\n");
+            return;
+        }
+
+        // Compare current logs with stored logs
+        MembershipLog membershipLog = new MembershipLog();
+        for (String log : storedLogs.split("\n")) {
+            membershipLog.addMembershipInfo(new MembershipLogRecord(log));
+        }
+        this.membershipView.setMembershipLog(membershipLog);
+    }
+    public void loadKeys() {
+        List<String> files = FileUtils.listFiles(this.id);
+        List<String> fileKeys = files.stream()
+                .filter(name -> !name.startsWith("membership"))
+                .map(name -> name.split("\\.")[0]).toList();
+        this.keys.addAll(fileKeys);
+    }
+
+    public void addPendingRequest(String nodeID, String message) {
+        this.pendingRequests.addRequest(nodeID, message);
+    }
+    public void emptyPendingRequests(String nodeID) {
+        this.pendingRequests.empty(nodeID);
+    }
+    public void applyPendingRequests(String nodeID) {
+        for (var message : this.pendingRequests.getNodePendingRequests(nodeID)){
+            this.redirect(this.getMembershipInfo(nodeID), message);
+        }
+    }
+    public void mergePendingRequests(Message message) {
+        var receivedRequests = MessageStore.parsePendingRequestsMessage(message);
+        for (var key : receivedRequests.keySet()) {
+            if (this.pendingRequests.hasPendingRequests(key)) {
+                this.pendingRequests.getNodePendingRequests(key).addAll(receivedRequests.get(key));
+            } else {
+                this.pendingRequests.getPendingMessages().put(key, receivedRequests.get(key));
+            }
+        }
+        System.out.println("Pending requests merged");
+    }
+
+    public void updateSendMembershipProbability(double nChanges) {
+        if (nChanges == 0) {
+            this.sendMembershipProbability = Math.min(this.sendMembershipProbability + 0.1, 1.0);
+        } else {
+            if (nChanges >= 32) {
+                try {
+                    ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getByName(this.nodeIP));
+                    MembershipCollector.collectLight(serverSocket, this, true);
+                } catch (IOException e) {System.out.println("FAILURE - Collecting all membership");}
+            }
+            this.sendMembershipProbability = Math.max(this.sendMembershipProbability - 0.2, 0.0);
+        }
+    }
+    public boolean shouldSendMembershipMessage() {
+        return (this.sendMembershipProbability > 0.5);
+    }
+
+    // -------------- END OF UTILS ----------------
+
 
     // -------------- GETS AND SETS ---------------------
 
@@ -468,78 +633,10 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     public Map.Entry<String, MembershipInfo> getClosestMembershipInfo(String keyHashed) {
         return this.membershipView.getClosestMembershipInfo(keyHashed);
     }
-    public String getSmallestMembershipNode() {
-        return this.membershipView.getMembershipTable().getSmallestMembershipNode();
-    }
 
     public void setLastSent(String nodeID) {
         this.lastSent = nodeID;
     }
 
-    public void addToPendingQueue(DispatcherThread dispatcherThread) {
-        this.pendingQueue.add(dispatcherThread);
-    }
-    public DispatcherThread removeFromPendingQueue() {
-        return this.pendingQueue.remove();
-    }
-    public boolean isEmptyPendingQueue() {
-        return this.pendingQueue.isEmpty();
-    }
-
-    public boolean isOnline() {
-        return this.membershipView.isOnline(this.id);
-    }
-
-    public void execute(Runnable runnable) {
-        this.executor.execute(runnable);
-    }
-
-    public void startMSCounter(){
-        // check if counter is stored in NV-memory
-        String storedCounter = FileUtils.getFile(this.id, "membershipCounter");
-        this.membershipCounter = storedCounter == null ? -1 : Integer.parseInt(storedCounter.trim());
-    }
-    public void incrementMSCounter(){
-        this.membershipCounter++;
-        FileUtils.saveFile(this.id, "membershipCounter", String.valueOf(this.membershipCounter));
-    }
-
-    public void saveLogs(){
-        FileUtils.saveFile(this.id, "membershipLogs", this.membershipView.getMembershipLog().toString());
-    }
-    public void loadLogs(){
-        String storedLogs = FileUtils.getFile(this.id, "membershipLogs");
-        if (storedLogs == null) {
-            System.out.println("No previous logs found...\n");
-            return;
-        }
-
-        // Compare current logs with stored logs
-        MembershipLog membershipLog = new MembershipLog();
-        for (String log : storedLogs.split("\n")) {
-            membershipLog.addMembershipInfo(new MembershipLogRecord(log));
-        }
-        this.membershipView.setMembershipLog(membershipLog);
-    }
-
-    public void loadKeys() {
-        List<String> files = FileUtils.listFiles(this.id);
-        List<String> fileKeys = files.stream()
-                .filter(name -> !name.startsWith("membership"))
-                .map(name -> name.split("\\.")[0]).toList();
-        this.keys.addAll(fileKeys);
-    }
-
-    public void selectAlarmer(boolean increment, String nodeID) {
-        if (nodeID != null) {
-            smallestOnline = nodeID;
-        } else if (increment) {
-            smallestOnline = this.membershipView.getMembershipTable()
-                    .getNextClosestMembershipInfo(smallestOnline).getKey();
-        } else {
-            smallestOnline = this.membershipView.getMembershipTable().getSmallestMembershipNode();
-        }
-        timerTask();
-    }
 
 }
