@@ -1,3 +1,5 @@
+package store;
+
 import messages.Message;
 import messages.MessageStore;
 import messages.TcpMessager;

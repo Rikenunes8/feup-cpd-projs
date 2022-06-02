@@ -1,3 +1,5 @@
+package store;
+
 public class OperationReplicatorThread implements Runnable  {
     private final Store store;
     private final String replicaID;

@@ -1,3 +1,5 @@
+package store;
+
 public class StoreCrashJoinThread implements Runnable {
     private final Store store;
 

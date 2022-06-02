@@ -1,3 +1,5 @@
+package store;
+
 import membership.MembershipView;
 import messages.MessageStore;
 import messages.TcpMessager;

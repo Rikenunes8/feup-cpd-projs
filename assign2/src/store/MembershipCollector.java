@@ -1,4 +1,5 @@
-import membership.MembershipLog;
+package store;
+
 import membership.MembershipView;
 import messages.MessageStore;
 import messages.TcpMessager;
@@ -11,7 +12,6 @@ import java.net.SocketTimeoutException;
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static messages.MulticastMessager.sendMcastMessage;
 

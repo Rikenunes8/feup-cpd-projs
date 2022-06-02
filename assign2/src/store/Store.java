@@ -1,3 +1,5 @@
+package store;
+
 import membership.*;
 
 import static messages.Message.ackMessage;
@@ -73,7 +75,7 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
 
     private static String usage() {
-        return "Usage:\n\t java Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
+        return "Usage:\n\t java Store.Store <IP_mcast_addr> <IP_mcast_port> <node_id>  <Store_port>";
     }
     private static Store parseArgs(String[] args) throws RemoteException{
         InetAddress mcastAddr;

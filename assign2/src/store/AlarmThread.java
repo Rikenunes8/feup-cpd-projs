@@ -1,3 +1,5 @@
+package store;
+
 import messages.MessageStore;
 
 import java.io.IOException;
