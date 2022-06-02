@@ -454,13 +454,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
     }
     private void transferOwnershipOnRejoin() {
         if (this.getClusterSize() <= 1) return;
+
         var keysCopy = new HashSet<>(this.getKeys());
         for (String key : keysCopy) {
             var preferenceList = this.getPreferenceList(key);
             if (!preferenceList.contains(this.id)) {
                 for (var replica : preferenceList) {
-                    this.transfer(replica, key, true);
+                    this.transfer(replica, key, false);
                 }
+                this.replicaDel(key);
             }
         }
     }
