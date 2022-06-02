@@ -17,8 +17,8 @@ import static messages.MulticastMessager.sendMcastMessage;
 
 public class MembershipCollector {
     private static final int TIMEOUT = 1000;
-    private static final int MAX_JOINS = 2; // TODO change to 3
-    public static final int MAX_MS_MSG = 2; // TODO change to 3
+    private static final int MAX_JOINS = 3;
+    public static final int MAX_MS_MSG = 3;
 
     public static void collect(ServerSocket serverSocket, Store store) {
         final Map<String, MembershipView> membershipViews = new HashMap<>();

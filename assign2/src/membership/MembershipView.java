@@ -50,7 +50,7 @@ public class MembershipView {
 
     public void synchronizeTable() {
         for (var log : this.membershipLog.getLogs()) {
-            if (log.getCounter() % 2 == 0) continue; // TODO if a node was supposed to be in cluster should do something
+            if (log.getCounter() % 2 == 0) continue;
             if (this.membershipTable.getMembershipInfoMap().containsKey(log.getNodeID())) {
                 this.membershipTable.removeMembershipInfo(log.getNodeID());
             }

@@ -564,7 +564,6 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
             }
             this.sendMembershipProbability = Math.max(this.sendMembershipProbability - 0.2, 0.0);
         }
-        System.out.println("New Probability: " + this.sendMembershipProbability);
     }
     public boolean shouldSendMembershipMessage() {
         return (this.sendMembershipProbability > 0.5);
