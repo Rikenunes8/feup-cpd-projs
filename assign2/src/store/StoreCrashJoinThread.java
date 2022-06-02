@@ -10,7 +10,7 @@ public class StoreCrashJoinThread implements Runnable {
     public void run() {
         try {
             Thread.sleep(1000);
-            this.store.joinAfterCrash();
+            this.store.rejoin();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }

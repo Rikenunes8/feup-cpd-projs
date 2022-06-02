@@ -3,7 +3,6 @@ package messages;
 import java.io.*;
 import java.net.Socket;
 
-import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.AbstractMap;
 import java.util.Map;

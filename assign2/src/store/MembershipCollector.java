@@ -49,14 +49,14 @@ public class MembershipCollector {
         try {serverSocket.close();}
         catch (IOException e) {throw new RuntimeException(e);}
 
-        System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
+        System.out.println("Membership Views received: " + membershipViews.size());
 
         if (!membershipViews.isEmpty())
             store.getMembershipView().getMembershipLog().removeLastRecord();
         store.mergeMembershipViews(membershipViews);
         // store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
 
-        System.out.println("Membership views synchronized"); // TODO DEBUG
+        System.out.println("Membership Views synchronized");
     }
 
     public static void collectLight(ServerSocket serverSocket, Store store, boolean allLogs) {
@@ -77,12 +77,12 @@ public class MembershipCollector {
         try {serverSocket.close();}
         catch (IOException e) {throw new RuntimeException(e);}
 
-        System.out.println("+ MembershipViews size: " + membershipViews.size()); // TODO DEBUG
+        System.out.println("Membership Views received: " + membershipViews.size());
 
         store.mergeMembershipViews(membershipViews);
-        store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
+        //store.updateMembershipView(store.getId(), store.getNodeIP(), store.getStorePort(), store.getMembershipCounter()); // Add itself to view
 
-        System.out.println("Membership views synchronized"); // TODO DEBUG
+        System.out.println("Membership Views synchronized");
     }
 
     private static Map.Entry<String, MembershipView> membershipReaderTask(ServerSocket serverSocket) {
