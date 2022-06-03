@@ -1,4 +1,5 @@
 # NOTA: em sistemas windows as barras "/" poderão ter que ser invertidas para "\"
+# NOTA: para o desenvolvimento do projeto foi utilizado o Java 17
 
 # Para compilar o código basta, a partir da raiz do projeto 2, "assign2/", executar o comando:
 
