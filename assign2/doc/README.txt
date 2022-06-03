@@ -1,11 +1,11 @@
 # NOTA: em sistemas windows as barras "/" poderão ter que ser invertidas para "\"
 
-# Para compilar o código basta, a partir da raiz do repositório "assign2/", executar os comandos:
+# Para compilar o código basta, a partir da raiz do projeto 2, "assign2/", executar o comando:
 
 javac src/membership/*.java src/messages/*.java src/utils/*.java src/store/*.java src/client/*.java -d build/
 
 
-# Para remover diretório com os pares chave-valor:
+# Para remover o diretório com os pares chave-valor:
 
 rm -rf network/     # em linux
 rmdir /s /q network # em windows
@@ -38,3 +38,6 @@ java -cp build/ client.TestClient 127.0.0.1:9000 get <key>
 java -cp build/ client.TestClient 127.0.0.1:9000 delete <key>
 java -cp build/ client.TestClient 127.0.0.1:9000 leave
 
+
+
+# Os pares chave-valor correspondentes a cada nó são armazenados no diretório "assign2/network/"
