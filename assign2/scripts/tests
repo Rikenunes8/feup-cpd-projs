@@ -1,0 +1,41 @@
+#!/bin/bash -e
+
+./test_client 1 join
+./test_client 1 leave
+./test_client 2 join
+./test_client 1 join
+./test_client 3 join
+./test_client 4 join
+./test_client 3 leave
+./test_client 4 leave
+./test_client 2 leave
+./test_client 1 leave
+
+./test_client 1 join
+./test_client 1 put ../files/file1.txt
+./test_client 1 get 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+./test_client 1 delete 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+./test_client 1 get 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+./test_client 1 leave
+
+./test_client 1 join
+./test_client 1 put ../files/file1.txt
+./test_client 2 join
+./test_client 2 get 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+./test_client 2 delete 03
+./test_client 2 delete 03
+./test_client 2 get 03
+./test_client 2 put ../files/file2.txt
+./test_client 3 join
+./test_client 4 join
+./test_client 1 get 6c753a9f10127396157bdef3e1aa77ef2fc86689d6e921e75ed8bac66d98cc8f
+./test_client 4 get 6c753a9f10127396157bdef3e1aa77ef2fc86689d6e921e75ed8bac66d98cc8f
+./test_client 2 leave
+./test_client 2 get 6c753a9f10127396157bdef3e1aa77ef2fc86689d6e921e75ed8bac66d98cc8f
+./test_client 2 join
+./test_client 2 put ../files/file1.txt
+./test_client 2 put ../files/file3.txt
+./test_client 2 put ../files/file4.txt
+./test_client 2 put ../files/file5.txt
+./test_client 4 leave
+./test_client 4 join
