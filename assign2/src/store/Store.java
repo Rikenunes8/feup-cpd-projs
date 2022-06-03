@@ -248,20 +248,22 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         // Compare hashedID with the smaller hashedID online in the cluster view
         boolean smaller = this.isOnline() && id.equals(this.smallestOnline);
         boolean shouldAlarm = this.shouldSendMembershipMessage();
-        if (this.executorTimerTask == null && smaller) {
-            if (!shouldAlarm) return;
-            System.out.println("Alarm set");
-            this.executorTimerTask = Executors.newScheduledThreadPool(1);
-            this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.MILLISECONDS);
-        }
-        else if (this.executorTimerTask != null && (!smaller || !shouldAlarm)) {
-            System.out.println("Alarm canceled");
-            this.executorTimerTask.shutdown();
-            try { this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);}
-            catch (InterruptedException e) {System.out.println("Alarm shutdown interrupted");}
+        synchronized (this) {
+            if (this.executorTimerTask == null && smaller) {
+                if (!shouldAlarm) return;
+                System.out.println("Alarm set");
+                this.executorTimerTask = Executors.newScheduledThreadPool(1);
+                this.executorTimerTask.scheduleAtFixedRate(new AlarmThread(this), 0, ALARM_PERIOD, TimeUnit.MILLISECONDS);
+            }
+            else if (this.executorTimerTask != null && (!smaller || !shouldAlarm)) {
+                System.out.println("Alarm canceled");
+                this.executorTimerTask.shutdown();
+                try { this.executorTimerTask.awaitTermination(1, TimeUnit.SECONDS);}
+                catch (InterruptedException e) {System.out.println("Alarm shutdown interrupted");}
 
-            if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
-            this.executorTimerTask = null;
+                if (!this.executorTimerTask.isTerminated()) this.executorTimerTask.shutdownNow();
+                this.executorTimerTask = null;
+            }
         }
     }
     public void selectAlarmer(boolean increment, String nodeID) {

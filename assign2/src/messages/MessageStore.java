@@ -44,28 +44,6 @@ public class MessageStore extends Message{
         return joinLeaveMessage("MS_UPDATE", nodeID, nodeIP, storePort, msPort, membershipCounter, all);
     }
 
-
-    public static String putMessage(String key, String value) {
-        return Message.putMessage(key, value);
-    }
-    public static String getMessage(String key) {
-        return Message.getMessage(key);
-    }
-    public static String deleteMessage(String key) {
-        return Message.deleteMessage(key);
-    }
-    public static String replicaPutMessage(String key, String value) {
-        return storeMessage("REPLICA_PUT", key, value);
-    }
-    public static String replicaDelMessage(String key) {
-        return storeMessage("REPLICA_DEL", key, null);
-    }
-    public static String replicaGetMessage(String key) {
-        return storeMessage("REPLICA_GET", key, null);
-    }
-
-
-
     /**
      * Creates a membership message based on the parameters given
      * @param membershipView MembershipView, contains a MembershipTable and a MembershipLog
@@ -95,7 +73,6 @@ public class MessageStore extends Message{
         return buildHeader(headerLines) + body;
     }
 
-
     public static MembershipView parseMembershipMessage(Message message) {
         MembershipTable membershipTable = new MembershipTable();
         MembershipLog membershipLog = new MembershipLog();
@@ -113,6 +90,27 @@ public class MessageStore extends Message{
         }
         return new MembershipView(membershipTable, membershipLog);
     }
+
+
+    public static String putMessage(String key, String value) {
+        return Message.putMessage(key, value);
+    }
+    public static String getMessage(String key) {
+        return Message.getMessage(key);
+    }
+    public static String deleteMessage(String key) {
+        return Message.deleteMessage(key);
+    }
+    public static String replicaPutMessage(String key, String value) {
+        return storeMessage("REPLICA_PUT", key, value);
+    }
+    public static String replicaDelMessage(String key) {
+        return storeMessage("REPLICA_DEL", key, null);
+    }
+    public static String replicaGetMessage(String key) {
+        return storeMessage("REPLICA_GET", key, null);
+    }
+
 
     public static String pendingRequestsMessage(Map<String, AbstractQueue<String>> pendingRequests) {
         // BODY
