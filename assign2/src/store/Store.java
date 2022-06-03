@@ -61,15 +61,15 @@ public class Store extends UnicastRemoteObject implements IMembership, IService 
         // If the store went down due to a crash then automatically join on start up
         if (store.isJoined()) store.execute(new StoreCrashJoinThread(store));
 
-        while (true) {
-            try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
+        try (ServerSocket serverSocket = new ServerSocket(store.storePort, 0, InetAddress.getByName(store.nodeIP))){
+            while (true) {
                 Socket socket = serverSocket.accept();
                 System.out.println("Main connection accepted");
 
                 store.executor.execute(new DispatcherThread(socket, store));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
             }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
